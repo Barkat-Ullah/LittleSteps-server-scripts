@@ -1,5 +1,8 @@
 model ScheduleItem {
     id                      String                  @id @default(auto()) @map("_id") @db.ObjectId
+    userId                  String                  @db.ObjectId
+    childIds                String[]                @db.ObjectId
+    providerId              String?                 @db.ObjectId //for events linked to a provider
     itemType                ItemType
     // --- SHARED FIELDS ---
     title                   String
@@ -9,7 +12,6 @@ model ScheduleItem {
     link                    String?
     fileUrl                 String?
     notes                   String?
-    // Shared Date and Time
     startDate               DateTime?
     endDate                 DateTime?
     startTime               String?
@@ -18,10 +20,6 @@ model ScheduleItem {
     daysPWeek               Int?
     days                    String[]
     isAddedCalender         Boolean                 @default(false)
-    // Shared User Relations
-    userId                  String                  @db.ObjectId
-    // Shared Child Relations (Unified to Array for consistency)
-    childIds                String[]                @db.ObjectId
     isForAllChild           Boolean                 @default(false)
     // --- EVENT-SPECIFIC FIELDS ---
     eventCategory           EventCategory?
@@ -44,6 +42,7 @@ model ScheduleItem {
     //relations
     user                    User                    @relation("ItemCreator", fields: [userId], references: [id])
     children                Children[]              @relation(fields: [childIds], references: [id])
+    provider                NoteProvider?           @relation(fields: [providerId], references: [id])
     userCompletedActivities UserCompletedActivity[]
 
     @@map("schedule_items")

@@ -1,0 +1,108 @@
+model ChildDocument {
+    id         String   @id @default(auto()) @map("_id") @db.ObjectId
+    childId    String   @db.ObjectId
+    fileName   String?
+    image      String?
+    video      String?
+    pdf        String?
+    files      String?
+    uploadedAt DateTime @default(now())
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @updatedAt
+    //relation
+    child      Children @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+    @@map("child_documents")
+}
+
+// 2. Provider Information
+model NoteProvider {
+    id            String         @id @default(auto()) @map("_id") @db.ObjectId
+    childId       String         @db.ObjectId
+    fullName      String
+    specialty     SpecialtyEnum?
+    phone         String?
+    email         String?
+    address       String?
+    notes         String?
+    status        ProviderStatus @default(Incoming)
+    createdAt     DateTime       @default(now())
+    updatedAt     DateTime       @updatedAt
+    //relation
+    child         Children       @relation(fields: [childId], references: [id], onDelete: Cascade)
+    scheduleItems ScheduleItem[]
+
+    @@map("note_providers")
+}
+
+enum ProviderStatus {
+    Incoming
+    Upcoming
+}
+
+enum SpecialtyEnum {
+    Speech_therapist
+    Occupational_therapist
+    Pediatrician
+    Teacher
+    School_counselor
+    Dentist
+    Coordinator
+    Baby_sitter
+    Other
+    Doctor
+    Appointment
+}
+
+// 3. Health & Care Notes
+model HealthCareNote {
+    id          String    @id @default(auto()) @map("_id") @db.ObjectId
+    childId     String    @db.ObjectId
+    title       String
+    description String?
+    note        NoteType?
+    image       String?
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
+    //relation
+    child       Children  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+    @@map("health_care_notes")
+}
+
+enum NoteType {
+    Allergies
+    Medications
+    Dosages
+    Emergency_instructions
+    Illness_history
+    Care_routines
+}
+
+// 4. Preferences & Sensory Notes
+model PreferenceSensoryNote {
+    id          String               @id @default(auto()) @map("_id") @db.ObjectId
+    childId     String               @db.ObjectId
+    title       String
+    description String?
+    helps       String?
+    avoid       String?
+    image       String?
+    category    SensoryCategoryEnum?
+    createdAt   DateTime             @default(now())
+    updatedAt   DateTime             @updatedAt
+    //relation
+    child       Children             @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+    @@map("preference_sensory_notes")
+}
+
+enum SensoryCategoryEnum {
+    Sensory_sensitivities
+    Safe_Favorite_foods
+    Favorite_objects_or_comfort_tools
+    Noise_light_sensitivities
+    Triggers
+    Likes_and_Dislikes
+    Calming_techniques
+}

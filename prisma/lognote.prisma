@@ -1,0 +1,28 @@
+model BehaviorLog {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    childId   String   @db.ObjectId
+    behavior  String
+    logDate   DateTime
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    //relation
+    child     Children @relation(fields: [childId], references: [id])
+
+    @@index([childId, logDate])
+    @@map("behaviorLog")
+}
+
+model Lognote {
+    id          String   @id @default(auto()) @map("_id") @db.ObjectId
+    childId     String   @db.ObjectId
+    title       String
+    type        String
+    description String
+    files       String?
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+    //relation
+    child       Children @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+    @@map("lognote")
+}
