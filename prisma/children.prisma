@@ -1,0 +1,43 @@
+model Children {
+    id                  String               @id @default(auto()) @map("_id") @db.ObjectId
+    creatorId           String               @db.ObjectId
+    fullName            String
+    dateOfBirth         DateTime
+    personalizationType PersonalizationType?
+    learningStage       LearningStage? //early lerner
+    ageGroup            String? // early lerner age
+    supportReceived     String[]
+    communication       String[]
+    toileting           ToiletingStatus?
+    diagnoses           String[]
+    image               String?
+    isDeleted           Boolean              @default(false)
+    createdAt           DateTime             @default(now())
+    updatedAt           DateTime             @updatedAt
+    // Relation
+    user                User                 @relation("ChildrenCreator", fields: [creatorId], references: [id])
+    // MANY-TO-MANY RELATION: Use this for Events
+    scheduleItemIds     String[]             @db.ObjectId
+    scheduleItem        ScheduleItem[]       @relation(fields: [scheduleItemIds], references: [id])
+
+    @@map("children")
+}
+
+enum PersonalizationType {
+    ByStage
+    ByAge
+}
+
+enum LearningStage {
+    Early_Learner
+    Emerging_Explorer
+    Growing_Thinker
+    Over_10Years_Old
+}
+
+enum ToiletingStatus {
+    Not_Yet_Potty_Trained
+    Fully_Potty_Trained
+    Currently_Potty_Training
+    Not_Able_To_Be_Potty_Trained
+}

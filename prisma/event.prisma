@@ -1,0 +1,120 @@
+model ScheduleItem {
+    id                      String                  @id @default(auto()) @map("_id") @db.ObjectId
+    itemType                ItemType
+    // --- SHARED FIELDS ---
+    title                   String
+    description             String?
+    status                  ItemStatus              @default(Pending)
+    image                   String?
+    link                    String?
+    fileUrl                 String?
+    notes                   String?
+    // Shared Date and Time
+    startDate               DateTime?
+    endDate                 DateTime?
+    startTime               String?
+    endTime                 String?
+    duration                Int?
+    daysPWeek               Int?
+    days                    String[]
+    isAddedCalender         Boolean                 @default(false)
+    // Shared User Relations
+    userId                  String                  @db.ObjectId
+    // Shared Child Relations (Unified to Array for consistency)
+    childIds                String[]                @db.ObjectId
+    isForAllChild           Boolean                 @default(false)
+    // --- EVENT-SPECIFIC FIELDS ---
+    eventCategory           EventCategory?
+    location                String?
+    weeks                   Int?
+    reminderTime            Int?
+    repeatType              RepeatType              @default(None)
+    repeatEndDate           DateTime?
+    // --- ACTIVITY-SPECIFIC FIELDS ---
+    stage                   StageEnum?
+    activityType            ActivitiesEnum?
+    skill                   String[]
+    materials               String?
+    howToDoIt               String?
+    whatItHelpsWith         String?
+    // Soft Delete & Timestamps
+    isDeleted               Boolean                 @default(false)
+    createdAt               DateTime                @default(now())
+    updatedAt               DateTime                @updatedAt
+    //relations
+    user                    User                    @relation("ItemCreator", fields: [userId], references: [id])
+    children                Children[]              @relation(fields: [childIds], references: [id])
+    userCompletedActivities UserCompletedActivity[]
+
+    @@map("schedule_items")
+}
+
+// --- RELATED MODELS ---
+
+model UserCompletedActivity {
+    id             String        @id @default(auto()) @map("_id") @db.ObjectId
+    userId         String        @db.ObjectId
+    scheduleItemId String?       @db.ObjectId // Updated to point to the unified model
+    isCompleted    Boolean
+    completedAt    DateTime?     @default(now())
+    //relations
+    user           User          @relation("CompleteActivity", fields: [userId], references: [id])
+    scheduleItem   ScheduleItem? @relation(fields: [scheduleItemId], references: [id])
+
+    @@map("userCompletedActivity")
+}
+
+// 1. The new discriminator enum
+enum ItemType {
+    Event
+    Activity
+}
+
+// 2. A unified status enum
+enum ItemStatus {
+    Pending
+    Completed
+}
+
+enum EventCategory {
+    Speech_Therapy
+    Occupational_Therapy
+    Physical_Therapy
+    ABA_Therapy
+    School_Drop_Off
+    School_Pick_Up
+    Medical_Appointment
+    Dentist_Appointment
+    Counseling_Session
+    Social_Skills_Group
+    Sensory_Play_Time
+    Learning_Activity
+    Outdoor_Activity
+    Meal_Time
+    Medication_Reminder
+    Personal_Care
+    Family_Event
+    Play_date
+    Other
+}
+
+enum RepeatType {
+    None
+    Daily
+    Weekly
+    Custom
+}
+
+enum StageEnum {
+    Early
+    Emerging
+    Growing
+}
+
+enum ActivitiesEnum {
+    Communication
+    Daily_Routines
+    Calm_And_Explorer
+    Move_and_Play
+    Learning_and_skills
+}

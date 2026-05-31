@@ -2,36 +2,39 @@
 // CORE user (IDENTITY + AUTH)
 ///////////////////////////////
 model User {
-    id               String             @id @default(auto()) @map("_id") @db.ObjectId
-    email            String             @unique
-    password         String?
-    role             userRole           @default(USER)
-    provider         Provider           @default(EMAIL_PASSWORD)
-    status           UserStatus         @default(ACTIVE)
-    stripeCustomerId String?
-    isDeleted        Boolean            @default(false)
-    hasPaidPlan      Boolean            @default(false)
-    createdAt        DateTime           @default(now())
-    updatedAt        DateTime           @updatedAt
+    id                      String                  @id @default(auto()) @map("_id") @db.ObjectId
+    email                   String                  @unique
+    password                String?
+    role                    userRole                @default(USER)
+    provider                Provider                @default(EMAIL_PASSWORD)
+    status                  UserStatus              @default(ACTIVE)
+    stripeCustomerId        String?
+    isDeleted               Boolean                 @default(false)
+    hasPaidPlan             Boolean                 @default(false)
+    createdAt               DateTime                @default(now())
+    updatedAt               DateTime                @updatedAt
     /// Relations
-    userDetails      userDetails?
-    sessions         userSession[]
-    oauth            OAuthAccount[]
+    userDetails             userDetails?
+    sessions                userSession[]
+    oauth                   OAuthAccount[]
     //self relation
-    createdById      String?            @db.ObjectId
-    createdBy        User?              @relation("UserCreation", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-    createdUsers     User[]             @relation("UserCreation")
+    createdById             String?                 @db.ObjectId
+    createdBy               User?                   @relation("UserCreation", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+    createdUsers            User[]                  @relation("UserCreation")
     // other relations
-    receiver         Notification[]     @relation("Receiver")
-    sender           Notification[]     @relation("Sender")
-    roomSender       Room[]             @relation("RoomSender")
-    roomReceiver     Room[]             @relation("RoomReceiver")
-    sentChats        Chat[]             @relation("ChatSender")
-    receivedChats    Chat[]             @relation("ChatReceiver")
-    tasks            Task[]             @relation("TaskUser")
-    userSubscription UserSubscription[] @relation("UserSubscriptions")
-    payments         Payment[]
-    favorite         favorite[]         @relation("UserCreator")
+    receiver                Notification[]          @relation("Receiver")
+    sender                  Notification[]          @relation("Sender")
+    roomSender              Room[]                  @relation("RoomSender")
+    roomReceiver            Room[]                  @relation("RoomReceiver")
+    sentChats               Chat[]                  @relation("ChatSender")
+    receivedChats           Chat[]                  @relation("ChatReceiver")
+    tasks                   Task[]                  @relation("TaskUser")
+    userSubscription        UserSubscription[]      @relation("UserSubscriptions")
+    payments                Payment[]
+    favorite                favorite[]              @relation("UserCreator")
+    children                Children[]              @relation("ChildrenCreator")
+    scheduleItems           ScheduleItem[]          @relation("ItemCreator")
+    userCompletedActivities UserCompletedActivity[] @relation("CompleteActivity")
 
     @@map("user")
 }
@@ -125,7 +128,7 @@ model PendingOtpSession {
 enum userRole {
     ADMIN
     USER
-    GUEST
+    CAREGIVER
 }
 
 enum UserStatus {
