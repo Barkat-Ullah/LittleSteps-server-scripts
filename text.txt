@@ -1,0 +1,28 @@
+step 1 : nano /var/www/deploy.sh
+///////////////////////// (step:2)          
+#!/bin/bash
+
+set -e
+
+echo "🚀 Starting Deployment..."
+
+cd /var/www/pholishmiko-backend
+
+echo "📥 Pulling latest changes from Git..."
+git pull origin main
+
+echo "📦 Installing dependencies..."
+npm install
+
+echo "🛠️ Building the project..."
+
+npm run build
+
+echo "🔄 Restarting PM2 process..."
+pm2 reload 0
+
+echo "✅ Deployment completed successfully! 🎉"
+
+////////////////////////
+step : 3
+chmod +x /var/www/deploy.sh

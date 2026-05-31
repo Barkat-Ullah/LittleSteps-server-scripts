@@ -1,0 +1,40 @@
+model Task {
+    id            String        @id @default(auto()) @map("_id") @db.ObjectId
+    userId        String        @db.ObjectId
+    title         String
+    description   String?
+    files         String?
+    fileType      String?
+    tags          String[]
+    estimatedTime Int?
+    content_url   String?
+    category      EnumCategory?
+    content       EnumContent
+    status        Status        @default(Pending)
+    isDeleted     Boolean       @default(false)
+    createdAt     DateTime      @default(now())
+    updatedAt     DateTime      @updatedAt
+    // relation
+    user          User          @relation("TaskUser", fields: [userId], references: [id])
+    favorite      favorite[]
+
+    @@map("tasks")
+}
+
+enum Status {
+    Pending
+    Complete
+    Canceled
+}
+
+enum EnumContent {
+    Articles
+    Podcast
+    Books
+}
+
+enum EnumCategory {
+    Daily_Living
+    Communication
+    Parent_Support
+}

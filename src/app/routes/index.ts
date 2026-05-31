@@ -1,0 +1,58 @@
+import { Router } from "express";
+import {
+  bullBoard,
+  bullBoardBasePath,
+} from "../../helpers/queueMonitor/bullBoard";
+import { apiKeyMiddleware } from "../middlewares/apiKeyMiddleware";
+import { apiAccessTokenMiddleware } from "../middlewares/apiAccessTokenMiddleware";
+import userRouter from "../modules/user/user.route";
+import authRouter from "../modules/auth/auth.route";
+import sendResponse from "../../shared/sendResponse";
+import uploadRouter from "../modules/upload/upload.route";
+import taskRouter from "../modules/task/task.route";
+import { favoriteRouter } from "../modules/favorite/favorite.route";
+
+const router = Router();
+
+// 🛡️ Reusable Security Layer Array
+const secureApiLayer = [apiKeyMiddleware, apiAccessTokenMiddleware];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. GLOBAL / ROUTE-SPECIFIC PROTECTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+router.use("/users", ...secureApiLayer);
+router.use("/users/*", ...secureApiLayer);
+
+router.use("/tasks", ...secureApiLayer);
+router.use("/tasks/*", ...secureApiLayer);
+router.use("/favorites", ...secureApiLayer);
+router.use("/favorites/*", ...secureApiLayer);
+
+router.use(bullBoardBasePath, ...secureApiLayer);
+router.use(`${bullBoardBasePath}/*`, ...secureApiLayer);
+
+router.use("/uploads", uploadRouter);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. MOUNT SUB-ROUTERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.use("/auth", authRouter);
+router.use("/users", userRouter);
+router.use("/tasks", taskRouter);
+router.use("/favorites", favoriteRouter);
+
+router.use(bullBoardBasePath, bullBoard);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. CATCH-ALL 404 ROUTE
+// ─────────────────────────────────────────────────────────────────────────────
+router.all("*", (req, res) => {
+  return sendResponse(res, {
+    statusCode: 404,
+    success: false,
+    message: `Cannot ${req.method} ${req.url}`,
+  });
+});
+
+export default router;

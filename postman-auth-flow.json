@@ -1,0 +1,315 @@
+{
+  "info": {
+    "name": "Advance Backend Auth Flow",
+    "_postman_id": "b7b9e0d4-1f4e-4f2c-b9c4-2d6b7dd7e2f1",
+    "description": "Full OTP-based auth flow collection for registration, login, password recovery, and OTP management.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api/v1",
+      "type": "string"
+    },
+    { "key": "apiKey", "value": "1234567890", "type": "string" },
+    { "key": "apiAccessToken", "value": "1234567890", "type": "string" },
+    { "key": "deviceId", "value": "postman-device-1", "type": "string" },
+    { "key": "testFirstName", "value": "Test", "type": "string" },
+    { "key": "testLastName", "value": "User", "type": "string" },
+    {
+      "key": "testEmail",
+      "value": "test+{{Math.floor(Math.random()*10000)}}@example.com",
+      "type": "string"
+    },
+    { "key": "testPassword", "value": "Password123!", "type": "string" },
+    { "key": "testOtp", "value": "", "type": "string" },
+    { "key": "newPassword", "value": "Password456!", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "sessionId", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth Flow",
+      "item": [
+        {
+          "name": "Register (send OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              { "key": "X-API-Key", "value": "{{apiKey}}", "type": "text" },
+              {
+                "key": "X-API-Access-Token",
+                "value": "{{apiAccessToken}}",
+                "type": "text"
+              },
+              { "key": "X-Device-Id", "value": "{{deviceId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"{{testFirstName}}\",\n  \"lastName\": \"{{testLastName}}\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "try { const json = pm.response.json(); if (json?.data?.email) pm.collectionVariables.set('testEmail', json.data.email); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Email OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              { "key": "X-API-Key", "value": "{{apiKey}}", "type": "text" },
+              {
+                "key": "X-API-Access-Token",
+                "value": "{{apiAccessToken}}",
+                "type": "text"
+              },
+              { "key": "X-Device-Id", "value": "{{deviceId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{testOtp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-email-otp"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "try { const json = pm.response.json(); if (json?.data?.id) pm.collectionVariables.set('userId', json.data.id); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              { "key": "X-API-Key", "value": "{{apiKey}}", "type": "text" },
+              {
+                "key": "X-API-Access-Token",
+                "value": "{{apiAccessToken}}",
+                "type": "text"
+              },
+              { "key": "X-Device-Id", "value": "{{deviceId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"deviceId\": \"{{deviceId}}\",\n  \"deviceType\": \"postman\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "try { const json = pm.response.json(); const data = json?.data; if (data?.accessToken) pm.collectionVariables.set('accessToken', data.accessToken); if (data?.refreshToken) pm.collectionVariables.set('refreshToken', data.refreshToken); if (data?.sessionId) pm.collectionVariables.set('sessionId', data.sessionId); if (data?.user?.id) pm.collectionVariables.set('userId', data.user.id); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password (send OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              { "key": "X-API-Key", "value": "{{apiKey}}", "type": "text" },
+              {
+                "key": "X-API-Access-Token",
+                "value": "{{apiAccessToken}}",
+                "type": "text"
+              },
+              { "key": "X-Device-Id", "value": "{{deviceId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password (OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              { "key": "X-API-Key", "value": "{{apiKey}}", "type": "text" },
+              {
+                "key": "X-API-Access-Token",
+                "value": "{{apiAccessToken}}",
+                "type": "text"
+              },
+              { "key": "X-Device-Id", "value": "{{deviceId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{testOtp}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "Resend Password Reset OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              { "key": "X-API-Key", "value": "{{apiKey}}", "type": "text" },
+              {
+                "key": "X-API-Access-Token",
+                "value": "{{apiAccessToken}}",
+                "type": "text"
+              },
+              { "key": "X-Device-Id", "value": "{{deviceId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{testEmail}}\",\n  \"purpose\": \"PASSWORD_RESET\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/otp/resend",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "otp", "resend"]
+            }
+          }
+        },
+        {
+          "name": "Send OTP (generic)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              { "key": "X-API-Key", "value": "{{apiKey}}", "type": "text" },
+              {
+                "key": "X-API-Access-Token",
+                "value": "{{apiAccessToken}}",
+                "type": "text"
+              },
+              { "key": "X-Device-Id", "value": "{{deviceId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{testEmail}}\",\n  \"purpose\": \"PASSWORD_RESET\",\n  \"channel\": \"email\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/otp/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "otp", "send"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP (generic)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              { "key": "X-API-Key", "value": "{{apiKey}}", "type": "text" },
+              {
+                "key": "X-API-Access-Token",
+                "value": "{{apiAccessToken}}",
+                "type": "text"
+              },
+              { "key": "X-Device-Id", "value": "{{deviceId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{testEmail}}\",\n  \"purpose\": \"PASSWORD_RESET\",\n  \"otp\": \"{{testOtp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/otp/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "otp", "verify"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

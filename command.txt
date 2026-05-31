@@ -1,0 +1,6 @@
+
+npm run generate test
+
+npm run generate -- test --sync
+npm run generate -- test --sync-select
+npm run generate -- test --sync-validation

@@ -1,0 +1,13 @@
+model favorite {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  taskId     String   @db.ObjectId
+  isFavorite Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  //relation
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user       User     @relation("UserCreator", fields: [userId], references: [id])
+
+  @@map("love_react")
+}

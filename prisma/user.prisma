@@ -1,0 +1,142 @@
+///////////////////////////////
+// CORE user (IDENTITY + AUTH)
+///////////////////////////////
+model User {
+    id               String             @id @default(auto()) @map("_id") @db.ObjectId
+    email            String             @unique
+    password         String?
+    role             userRole           @default(USER)
+    provider         Provider           @default(EMAIL_PASSWORD)
+    status           UserStatus         @default(ACTIVE)
+    stripeCustomerId String?
+    isDeleted        Boolean            @default(false)
+    hasPaidPlan      Boolean            @default(false)
+    createdAt        DateTime           @default(now())
+    updatedAt        DateTime           @updatedAt
+    /// Relations
+    userDetails      userDetails?
+    sessions         userSession[]
+    oauth            OAuthAccount[]
+    //self relation
+    createdById      String?            @db.ObjectId
+    createdBy        User?              @relation("UserCreation", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+    createdUsers     User[]             @relation("UserCreation")
+    // other relations
+    receiver         Notification[]     @relation("Receiver")
+    sender           Notification[]     @relation("Sender")
+    roomSender       Room[]             @relation("RoomSender")
+    roomReceiver     Room[]             @relation("RoomReceiver")
+    sentChats        Chat[]             @relation("ChatSender")
+    receivedChats    Chat[]             @relation("ChatReceiver")
+    tasks            Task[]             @relation("TaskUser")
+    userSubscription UserSubscription[] @relation("UserSubscriptions")
+    payments         Payment[]
+    favorite         favorite[]         @relation("UserCreator")
+
+    @@map("user")
+}
+
+///////////////////////////////
+// user PROFILE (OPTIONAL DATA)
+///////////////////////////////
+model userDetails {
+    id               String    @id @default(auto()) @map("_id") @db.ObjectId
+    userId           String    @unique @db.ObjectId
+    /// Profile fields
+    firstName        String?
+    lastName         String?
+    address          String?
+    phone            String?
+    files            String?
+    dob              DateTime?
+    educationLevel   String?
+    employmentStatus String?
+    parentingGoal    String?
+    supportSystem    String?
+    relation         String?
+    createdAt        DateTime  @default(now())
+    updatedAt        DateTime  @updatedAt
+    /// Relation
+    user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+///////////////////////////////
+// MULTI-DEVICE SESSIONS
+///////////////////////////////
+model userSession {
+    id           String    @id @default(auto()) @map("_id") @db.ObjectId
+    userId       String    @db.ObjectId
+    /// Hashed refresh token (NEVER store raw token)
+    refreshToken String
+    /// Device metadata
+    deviceId     String
+    deviceType   String?
+    userAgent    String?
+    ipAddress    String?
+    /// Token lifecycle
+    expiresAt    DateTime
+    revokedAt    DateTime?
+    createdAt    DateTime  @default(now())
+    updatedAt    DateTime  @updatedAt
+    /// Relation
+    user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId])
+    @@index([deviceId])
+}
+
+///////////////////////////////
+// OAUTH PROVIDER ACCOUNTS
+///////////////////////////////
+model OAuthAccount {
+    id             String    @id @default(auto()) @map("_id") @db.ObjectId
+    userId         String    @db.ObjectId
+    provideruserId String
+    /// Optional (only if calling provider APIs)
+    accessToken    String?
+    refreshToken   String?
+    expiresAt      DateTime?
+    createdAt      DateTime  @default(now())
+    updatedAt      DateTime  @updatedAt
+    //relation
+    user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    provider       Provider
+
+    @@unique([provider, provideruserId])
+    @@index([userId])
+}
+
+//if redis down, we can store pending OTP sessions here temporarily (with TTL cleanup)
+model PendingOtpSession {
+    id           String   @id @default(auto()) @map("_id") @db.ObjectId
+    identifier   String
+    purpose      String
+    otpHash      String
+    otpExpiresAt DateTime
+    signupData   Json?
+    createdAt    DateTime @default(now())
+
+    @@unique([identifier, purpose])
+}
+
+///////////////////////////////
+// ENUMS
+///////////////////////////////
+enum userRole {
+    ADMIN
+    USER
+    GUEST
+}
+
+enum UserStatus {
+    ACTIVE
+    SUSPENDED
+}
+
+enum Provider {
+    EMAIL_PASSWORD
+    GOOGLE
+    FACEBOOK
+    TWITTER
+    GITHUB
+}
