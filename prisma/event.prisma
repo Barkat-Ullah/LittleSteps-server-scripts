@@ -45,6 +45,9 @@ model ScheduleItem {
     provider                NoteProvider?           @relation(fields: [providerId], references: [id])
     userCompletedActivities UserCompletedActivity[]
 
+    @@index([status])
+    @@index([userId, childIds])
+    @@index([startDate, endDate])
     @@map("schedule_items")
 }
 
@@ -53,7 +56,7 @@ model ScheduleItem {
 model UserCompletedActivity {
     id             String        @id @default(auto()) @map("_id") @db.ObjectId
     userId         String        @db.ObjectId
-    scheduleItemId String?       @db.ObjectId // Updated to point to the unified model
+    scheduleItemId String?       @db.ObjectId
     isCompleted    Boolean
     completedAt    DateTime?     @default(now())
     //relations
