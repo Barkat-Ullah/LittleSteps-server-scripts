@@ -5,6 +5,8 @@ import ApiError from "../../../error/ApiErrors";
 import { IPaginationOptions } from "../../../interfaces/pagination";
 import { paginationHelper } from "../../../shared/pagination";
 import redis from "../../../lib/redisConnection";
+import { Request } from "express";
+import { handleFileUploads } from "../../../utils/handleFile";
 
 type IUserFilterRequest = {
   searchTerm?: string;
@@ -121,11 +123,17 @@ const getMyProfileFromDB = async (userId: string) => {
   return user;
 };
 
-const updateMyProfileIntoDb = async (payload: any, userId: string) => {
-  if (!payload || typeof payload !== "object") {
-    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid update payload");
-  }
+const updateMyProfileIntoDb = async (req: Request) => {
+  const userId = req.user!.id;
+  const data = req.body; // রিকোয়েস্ট থেকে ডাটা নেওয়া হলো
+  const files = req.files as
+    | { [fieldname: string]: Express.Multer.File[] }
+    | undefined;
 
+  // ১. ফাইল আপলোড হ্যান্ডেল করা
+  const uploadedFiles = await handleFileUploads(files);
+
+  // ২. ইউজার আদৌ ডাটাবেজে আছে কিনা চেক করা
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw new ApiError(
@@ -134,28 +142,32 @@ const updateMyProfileIntoDb = async (payload: any, userId: string) => {
     );
   }
 
-  const { firstName, lastName, address, phone } = payload;
+  // ৩. 'data' (payload নয়) থেকে ফিল্ডগুলো ডিস্ট্রাকচার করা
+  const { firstName, lastName, address, phone, dob, educationLevel, employmentStatus, parentingGoal, supportSystem, relation } = data;
+  
   const userData: Prisma.UserUpdateInput = {};
-  const userDetailsData: {
-    firstName?: string | null;
-    lastName?: string | null;
-    address?: string | null;
-    phone?: string | null;
-  } = {};
+  const userDetailsData: Record<string, any> = {};
 
-  if (firstName !== undefined) {
-    userDetailsData.firstName = firstName;
-  }
-  if (lastName !== undefined) {
-    userDetailsData.lastName = lastName;
-  }
-  if (address !== undefined) {
-    userDetailsData.address = address;
-  }
-  if (phone !== undefined) {
-    userDetailsData.phone = phone;
+  // ৪. ডিফাইনড ভ্যালুগুলো অবজেক্টে পুশ করা
+  if (firstName !== undefined) userDetailsData.firstName = firstName;
+  if (lastName !== undefined) userDetailsData.lastName = lastName;
+  if (address !== undefined) userDetailsData.address = address;
+  if (phone !== undefined) userDetailsData.phone = phone;
+  
+  // অন্যান্য সম্ভাব্য ফিল্ড (অপশনাল, চাইলে রাখতে পারো)
+  if (dob !== undefined) userDetailsData.dob = dob ? new Date(dob) : null;
+  if (educationLevel !== undefined) userDetailsData.educationLevel = educationLevel;
+  if (employmentStatus !== undefined) userDetailsData.employmentStatus = employmentStatus;
+  if (parentingGoal !== undefined) userDetailsData.parentingGoal = parentingGoal;
+  if (supportSystem !== undefined) userDetailsData.supportSystem = supportSystem;
+  if (relation !== undefined) userDetailsData.relation = relation;
+
+  // ৫. আপলোড করা ফাইলের স্ট্রিং/URL 'files' ফিল্ডে যুক্ত করা
+  if (uploadedFiles) {
+    userDetailsData.files = uploadedFiles; // handleFileUploads যেভাবে রিটার্ন করে (string বা array)
   }
 
+  // 👑 ডাটাবেজ আপডেট অপারেশন
   const result = await prisma.user.update({
     where: { id: userId },
     data: {
@@ -163,7 +175,7 @@ const updateMyProfileIntoDb = async (payload: any, userId: string) => {
       userDetails: Object.keys(userDetailsData).length
         ? {
             upsert: {
-              create: userDetailsData,
+              create: userDetailsData as any,
               update: userDetailsData,
             },
           }
@@ -183,6 +195,7 @@ const updateMyProfileIntoDb = async (payload: any, userId: string) => {
           address: true,
           phone: true,
           files: true,
+          dob: true,
         },
       },
     },

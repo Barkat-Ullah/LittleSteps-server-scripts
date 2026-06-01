@@ -7,12 +7,11 @@ model Notification {
     isRead      Boolean     @default(false)
     referenceId String?
     type        NotifyType?
-
-    receiver User  @relation("Receiver", fields: [receiverId], references: [id])
-    sender   User? @relation("Sender", fields: [senderId], references: [id])
-
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+    createdAt   DateTime    @default(now())
+    updatedAt   DateTime    @updatedAt
+    //relations
+    receiver    User        @relation("Receiver", fields: [receiverId], references: [id])
+    sender      User?       @relation("Sender", fields: [senderId], references: [id])
 
     @@map("notifications")
 }

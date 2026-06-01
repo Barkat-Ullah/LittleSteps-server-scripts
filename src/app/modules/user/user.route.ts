@@ -12,13 +12,23 @@ import {
   updateUserRoleController,
 } from "./user.controller";
 import { userValidation } from "./user.validation";
+import { fileUploader } from "../../../utils/fileUploader";
 
 const userRouter = Router();
 
+const fileUpload = fileUploader.upload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "video", maxCount: 1 },
+  { name: "pdf", maxCount: 1 },
+  { name: "files", maxCount: 1 },
+]);
+
 userRouter.get(["/", "/all"], getAllUsersController);
 userRouter.get("/me", getMyProfileController);
+
 userRouter.patch(
-  "/me",
+  "/update-me",
+  fileUpload,
   validateRequest(userValidation.updateMyProfileSchema),
   updateMyProfileController,
 );

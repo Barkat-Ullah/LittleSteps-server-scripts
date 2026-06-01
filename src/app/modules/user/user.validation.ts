@@ -48,14 +48,20 @@ const updateUserSchema = z.object({
 });
 
 const updateMyProfileSchema = z.object({
-  body: z
-    .object({
-      fullName: z.string().min(1).optional(),
-      ...userDetailsSchema.partial().shape,
-    })
-    .strict(),
-  query: commonQuerySchema,
-  params: z.record(z.string(), z.string()),
+  firstName: z.string().min(1, "First name cannot be empty").optional(),
+  lastName: z.string().min(1, "Last name cannot be empty").optional(),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  dob: z
+    .string()
+    .datetime({ message: "Invalid date format" })
+    .optional()
+    .or(z.string().nullable()),
+  educationLevel: z.string().optional(),
+  employmentStatus: z.string().optional(),
+  parentingGoal: z.string().optional(),
+  supportSystem: z.string().optional(),
+  relation: z.string().optional(),
 });
 
 const updateUserRoleSchema = z.object({

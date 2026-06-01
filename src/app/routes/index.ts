@@ -11,6 +11,7 @@ import sendResponse from "../../shared/sendResponse";
 import uploadRouter from "../modules/upload/upload.route";
 import taskRouter from "../modules/task/task.route";
 import { favoriteRouter } from "../modules/favorite/favorite.route";
+import { childrenRouter } from "../modules/children/children.route";
 
 const router = Router();
 
@@ -27,6 +28,8 @@ router.use("/tasks", ...secureApiLayer);
 router.use("/tasks/*", ...secureApiLayer);
 router.use("/favorites", ...secureApiLayer);
 router.use("/favorites/*", ...secureApiLayer);
+router.use("/children", ...secureApiLayer);
+router.use("/children/*", ...secureApiLayer);
 
 router.use(bullBoardBasePath, ...secureApiLayer);
 router.use(`${bullBoardBasePath}/*`, ...secureApiLayer);
@@ -41,12 +44,14 @@ router.use("/auth", authRouter);
 router.use("/users", userRouter);
 router.use("/tasks", taskRouter);
 router.use("/favorites", favoriteRouter);
+router.use("/children", childrenRouter);
 
 router.use(bullBoardBasePath, bullBoard);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. CATCH-ALL 404 ROUTE
 // ─────────────────────────────────────────────────────────────────────────────
+// Catch-all 404   <── add this line
 router.all("*", (req, res) => {
   return sendResponse(res, {
     statusCode: 404,

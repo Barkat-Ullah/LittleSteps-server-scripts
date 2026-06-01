@@ -52,10 +52,8 @@ export const getUserByIdController = catchAsync(
 
 export const updateMyProfileController = catchAsync(
   async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const payload =
-      typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
-    const result = await UserServices.updateMyProfileIntoDb(payload, userId);
+
+    const result = await UserServices.updateMyProfileIntoDb(req);
 
     sendResponse(res, {
       statusCode: httpStatus.OK,

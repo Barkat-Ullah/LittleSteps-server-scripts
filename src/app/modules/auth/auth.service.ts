@@ -173,10 +173,8 @@ export const issueTokensAndSession = async (
       "Server misconfigured: REFRESH_TOKEN_EXPIRES_IN must be like '30d' or seconds",
     );
 
-  // 🆔 ফাইলের উপরে থাকা 'crypto' মডিউল সরাসরি ব্যবহার করে ২৪ ক্যারেক্টারের অবজেক্ট আইডি জেনারেট করা হচ্ছে
   const generatedSessionId = crypto.randomBytes(12).toString("hex");
 
-  // 🔑 আগে থেকেই টোকেন দুটো তৈরি করে নেওয়া হচ্ছে
   const accessToken = jwtHelpers.createToken(
     {
       id: user.id,
@@ -194,7 +192,6 @@ export const issueTokensAndSession = async (
     refreshExpiresIn,
   );
 
-  // 🎯 সিঙ্গেল রাইটে ডাটাবেজে সেশন ক্রিয়েট হবে
   const session = await prisma.userSession.create({
     data: {
       id: generatedSessionId,
@@ -230,9 +227,9 @@ export const issueTokensAndSession = async (
 };
 // ─────────────────────────────────────────────────────────────────────────────
 // REGISTRATION FLOW
-// Step 1: register   → OTP email পাঠাও
-// Step 2: verifyEmailOtp → OTP check করো, user তৈরি করো
-// Step 3: resendEmailVerificationOtp → OTP আবার পাঠাও
+// Step 1: register   → OTP email 
+// Step 2: verifyEmailOtp → OTP check 
+// Step 3: resendEmailVerificationOtp → OTP 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const registerService = async (payload: RegisterInput) => {
@@ -337,7 +334,7 @@ export const loginService = async (payload: LoginInput) => {
   const ok = await comparePassword(payload.password, user.password);
   if (!ok) throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid credentials");
 
-  // Suspended user login block করো
+  // Suspended user login block 
   if (user.status === UserStatus.SUSPENDED)
     throw new ApiError(httpStatus.FORBIDDEN, "Your account has been suspended");
 
@@ -370,16 +367,15 @@ export const loginService = async (payload: LoginInput) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FORGOT PASSWORD FLOW
-// Step 1: forgotPassword        → OTP email পাঠাও
-// Step 2: resetPassword         → OTP দিয়ে password update করো
-// Step 3: resendResetOtp        → OTP আবার পাঠাও
+// Step 1: forgotPassword        → OTP email 
+// Step 2: resetPassword         → OTP password update 
+// Step 3: resendResetOtp        → OTP  
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const forgotPasswordService = async (payload: ForgotPasswordInput) => {
   const email = normalizeEmail(payload.email);
   const user = await prisma.user.findUnique({ where: { email } });
 
-  // User না পেলেও success return — enumeration attack avoid করতে
   if (!user) return { email, otpExpiresInMinutes: OTP_EXPIRE_DURATION_MINUTES };
 
   return sendOtpService({
@@ -460,12 +456,12 @@ export const changePasswordService = async (
       where: { id: userData.id },
       data: { password: hashedPassword },
     }),
-    // ✅ সব active session revoke করো
+
     prisma.userSession.updateMany({
       where: { userId: userData.id, revokedAt: null },
       data: { revokedAt: new Date() },
     }),
-    // ✅ cache clear করো
+
     redis.del(`user:${userData.id}`).catch(() => {}),
   ]);
 
@@ -483,7 +479,7 @@ export const logoutService = async (params: {
 }) => {
   const { userId, sessionId, accessToken } = params;
 
-  // Session revoke করো
+  // Session revoke 
   if (sessionId) {
     await prisma.userSession.updateMany({
       where: { id: sessionId, userId },
@@ -491,10 +487,10 @@ export const logoutService = async (params: {
     });
   }
 
-  // Cache delete করো
+  // Cache delete 
   await redis.del(`user:${userId}`).catch(() => {});
 
-  // Access token blacklist করো
+  // Access token blacklist 
   if (accessToken) {
     const raw = accessToken.replace(/^bearer /i, "").trim();
     try {
@@ -508,7 +504,6 @@ export const logoutService = async (params: {
       }
       await blacklistToken(raw, ttl);
     } catch {
-      // Token already expired হলেও blacklist করো default TTL দিয়ে
       await blacklistToken(raw, TTL.TOKEN).catch(() => {});
     }
   }

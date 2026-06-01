@@ -295,8 +295,8 @@ const get${Capitalized}List = catchAsync(async (req: Request, res: Response) => 
     statusCode: httpStatus.OK,
     success: true,
     message: '${Capitalized} list retrieved successfully',
-    data: result.data,
-    meta: result.meta,
+    data: result?.data,
+    meta: result?.meta,
   });
 });
 
@@ -320,8 +320,8 @@ const getMy${Capitalized} = catchAsync(async (req: Request, res: Response) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'My ${Capitalized} list retrieved successfully',
-    data: result.data,
-    meta: result.meta,
+    data: result?.data,
+    meta: result?.meta,
   });
 });
 
