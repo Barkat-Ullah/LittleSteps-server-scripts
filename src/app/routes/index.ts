@@ -12,6 +12,7 @@ import uploadRouter from "../modules/upload/upload.route";
 import taskRouter from "../modules/task/task.route";
 import { favoriteRouter } from "../modules/favorite/favorite.route";
 import { childrenRouter } from "../modules/children/children.route";
+import childDocumentRouter from "../modules/childDocument/childDocument.route";
 
 const router = Router();
 
@@ -51,6 +52,8 @@ router.use(bullBoardBasePath, bullBoard);
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. CATCH-ALL 404 ROUTE
 // ─────────────────────────────────────────────────────────────────────────────
+router.use("/childdocuments", childDocumentRouter);
+
 // Catch-all 404   <── add this line
 router.all("*", (req, res) => {
   return sendResponse(res, {

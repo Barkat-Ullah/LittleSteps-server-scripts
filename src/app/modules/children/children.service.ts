@@ -40,7 +40,7 @@ type IChildrenFilterRequest = {
   status?: string;
 };
 
-const childrenSearchAbleFields = ["fullName", "email"];
+const childrenSearchAbleFields = ["fullName"];
 
 const getChildrenList = async (
   req: Request,
