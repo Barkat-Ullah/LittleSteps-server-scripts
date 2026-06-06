@@ -9,7 +9,7 @@ const childDocumentFilterableFields = [
   'searchTerm',
   'id',
   'createdAt',
-  'status',
+  'childId',
 ];
 
 // create ChildDocument

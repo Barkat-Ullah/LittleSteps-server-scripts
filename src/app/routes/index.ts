@@ -12,7 +12,8 @@ import uploadRouter from "../modules/upload/upload.route";
 import taskRouter from "../modules/task/task.route";
 import { favoriteRouter } from "../modules/favorite/favorite.route";
 import { childrenRouter } from "../modules/children/children.route";
-import childDocumentRouter from "../modules/childDocument/childDocument.route";
+import { childDocumentRouter } from "../modules/childDocument/childDocument.route";
+import {noteProviderRouter} from "../modules/noteProvider/noteProvider.route";
 
 const router = Router();
 
@@ -31,6 +32,10 @@ router.use("/favorites", ...secureApiLayer);
 router.use("/favorites/*", ...secureApiLayer);
 router.use("/children", ...secureApiLayer);
 router.use("/children/*", ...secureApiLayer);
+router.use("/child-documents", ...secureApiLayer);
+router.use("/child-documents/*", ...secureApiLayer);
+router.use("/note-providers", ...secureApiLayer);
+router.use("/note-providers/*", ...secureApiLayer);
 
 router.use(bullBoardBasePath, ...secureApiLayer);
 router.use(`${bullBoardBasePath}/*`, ...secureApiLayer);
@@ -46,13 +51,15 @@ router.use("/users", userRouter);
 router.use("/tasks", taskRouter);
 router.use("/favorites", favoriteRouter);
 router.use("/children", childrenRouter);
+router.use("/child-documents", childDocumentRouter);
+router.use("/note-providers", noteProviderRouter);
 
 router.use(bullBoardBasePath, bullBoard);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. CATCH-ALL 404 ROUTE
 // ─────────────────────────────────────────────────────────────────────────────
-router.use("/childdocuments", childDocumentRouter);
+
 
 // Catch-all 404   <── add this line
 router.all("*", (req, res) => {

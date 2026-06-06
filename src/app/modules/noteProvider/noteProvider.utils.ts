@@ -3,8 +3,8 @@ import { toUTCEndOfDay, toUTCEndOfMonth, toUTCStartOfDay, toUTCStartOfMonth } fr
 
 export const buildFilterConditions = (
   filterData: Record<string, any>,
-): Prisma.ChildDocumentWhereInput[] => {
-  const conditions: Prisma.ChildDocumentWhereInput[] = [];
+): Prisma.NoteProviderWhereInput[] => {
+  const conditions: Prisma.NoteProviderWhereInput[] = [];
 
   Object.keys(filterData).forEach(key => {
     const value = filterData[key];
@@ -30,6 +30,18 @@ export const buildFilterConditions = (
           },
         });
       }
+      return;
+    }
+
+    if (['status'].includes(key)) {
+      conditions.push({
+        [key]: { in: Array.isArray(value) ? value : [value] },
+      });
+      return;
+    }
+
+    if (['isDeleted'].includes(key)) {
+       conditions.push({ [key]: value === 'true' });
       return;
     }
 

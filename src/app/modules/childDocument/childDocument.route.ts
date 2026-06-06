@@ -1,9 +1,9 @@
 import express from "express";
 import auth from "../../middlewares/auth";
 import validateRequest from "../../middlewares/validateRequest";
-import { childDocumentController } from "./childDocument.controller";
 import { childDocumentValidation } from "./childDocument.validation";
 import { fileUploader } from "../../../utils/fileUploader";
+import { childDocumentController } from "./childDocument.controller";
 
 const router = express.Router();
 const fileUpload = fileUploader.upload.fields([
@@ -23,7 +23,7 @@ router.post(
 
 router.get("/", auth(), childDocumentController.getChildDocumentList);
 
-router.get("/my/:childId", auth(), childDocumentController.getMyChildDocument);
+router.get("/all/:childId", auth(), childDocumentController.getMyChildDocument);
 
 router.get("/:id", auth(), childDocumentController.getChildDocumentById);
 

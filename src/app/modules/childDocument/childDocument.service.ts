@@ -42,10 +42,10 @@ type IChildDocumentFilterRequest = {
   searchTerm?: string;
   id?: string;
   createdAt?: string;
-  status?: string;
+  childId?: string;
 };
 
-const childDocumentSearchAbleFields = ["fullName", "email"];
+const childDocumentSearchAbleFields = ["fileName"];
 
 const getChildDocumentList = async (
   req: Request,
@@ -147,7 +147,10 @@ const getMyChildDocument = async (
     AND: andConditions,
   };
 
+  // Fix #3: childId included in cache key to prevent cache collision
+  // between different children of the same user
   const cacheKey = CacheKeys.myList("childDocument", userId, {
+    childId,
     page,
     limit,
     searchTerm,
@@ -190,17 +193,10 @@ const updateChildDocument = async (req: Request) => {
     throw new ApiError(httpStatus.NOT_FOUND, "ChildDocument not found");
   }
 
+  // Fix #4: use spread like create so new file fields are picked up automatically
   const result = await prisma.childDocument.update({
     where: { id },
-    data: {
-      childId: data.childId ?? (existingChildDocument as any).childId,
-      fileName: data.fileName ?? (existingChildDocument as any).fileName,
-      image: uploadedFiles.image ?? (existingChildDocument as any).image,
-      video: uploadedFiles.video ?? (existingChildDocument as any).video,
-      pdf: uploadedFiles.pdf ?? (existingChildDocument as any).pdf,
-      files: uploadedFiles.files ?? (existingChildDocument as any).files,
-      uploadedAt: data.uploadedAt ?? (existingChildDocument as any).uploadedAt,
-    },
+    data: { ...data, ...uploadedFiles },
     select: childDocumentSelect,
   });
 
@@ -211,12 +207,16 @@ const updateChildDocument = async (req: Request) => {
 // -------------------------------------------------------
 // toggle status ChildDocument
 // -------------------------------------------------------
-const toggleStatusChildDocument = async (req: Request) => {};
+const toggleStatusChildDocument = async (req: Request) => {
+  throw new ApiError(httpStatus.NOT_IMPLEMENTED, "Toggle status is not applicable for ChildDocument");
+};
 
 // -------------------------------------------------------
 // soft delete ChildDocument
 // -------------------------------------------------------
-const softDeleteChildDocument = async (req: Request) => {};
+const softDeleteChildDocument = async (req: Request) => {
+  throw new ApiError(httpStatus.NOT_IMPLEMENTED, "Soft delete is not applicable for ChildDocument");
+};
 
 // -------------------------------------------------------
 // hard delete ChildDocument
