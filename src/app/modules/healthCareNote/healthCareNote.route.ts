@@ -23,7 +23,7 @@ router.post(
 
 router.get('/', auth(), healthCareNoteController.getHealthCareNoteList);
 
-router.get('/my', auth(), healthCareNoteController.getMyHealthCareNote);
+router.get('/my/:childId', auth(), healthCareNoteController.getMyHealthCareNote);
 
 router.get('/:id', auth(), healthCareNoteController.getHealthCareNoteById);
 

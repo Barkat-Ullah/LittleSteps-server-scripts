@@ -19,14 +19,13 @@ import {
 // create HealthCareNote
 // -------------------------------------------------------
 const createHealthCareNote = async (req: Request) => {
-  const userId = req.user!.id;
   const data = req.body;
   const files = req.files as
     | { [fieldname: string]: Express.Multer.File[] }
     | undefined;
 
   const uploadedFiles = await handleFileUploads(files);
-  const addedData = { ...data, ...uploadedFiles, userId };
+  const addedData = { ...data, ...uploadedFiles,  };
   const result = await prisma.healthCareNote.create({
     data: addedData,
     select: healthCareNoteSelect,
@@ -45,7 +44,7 @@ type IHealthCareNoteFilterRequest = {
   status?: string;
 };
 
-const healthCareNoteSearchAbleFields = ["fullName", "email"];
+const healthCareNoteSearchAbleFields = ["title", "description"];
 
 const getHealthCareNoteList = async (
   req: Request,

@@ -6,15 +6,12 @@ const createSchema = z.object({
   title: z.string({ error: 'title is required' }),
   description: z.string({ error: 'description is required' }).optional(),
   note: z.enum(NoteType, { error: 'note is required' }).optional(),
-  files: z.string({ error: 'files is required' }).optional(),
 });
 
 const updateSchema = z.object({
-  childId: z.string({ error: 'childId is required' }).optional(),
   title: z.string({ error: 'title is required' }).optional(),
   description: z.string({ error: 'description is required' }).optional(),
   note: z.enum(NoteType, { error: 'note is required' }).optional(),
-  files: z.string({ error: 'files is required' }).optional(),
 });
 
 export const healthCareNoteValidation = {
