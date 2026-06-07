@@ -6,9 +6,10 @@ import ApiError from "../../../error/ApiErrors";
 import {
   cacheOr,
   CacheKeys,
-  CacheInvalidator,
+  invalidateKeys,
+  invalidatePattern,
   TTL,
-} from "../../../lib/redisConnection"; 
+} from "../../../lib/redisConnection";
 
 const createMultipleEntries = async (
   payload: {
@@ -41,8 +42,22 @@ const createMultipleEntries = async (
     data: entriesToCreate,
   });
 
-  // Invalidate today's log cache for this child under this accessId
-  await CacheInvalidator.onRecordCreate("behaviorLog");
+  // Extract unique YYYY-MM-DD dates from the payload (client-supplied, timezone-safe)
+  const uniqueDates = [
+    ...new Set(selectedBehaviors.map((item) => item.date.split("T")[0])),
+  ];
+
+  // Invalidate only the exact cache keys that were written to
+  await Promise.all(
+    uniqueDates.map((date) =>
+      invalidateKeys(
+        CacheKeys.myList("behaviorLog", accessId, { childId, date }),
+      ),
+    ),
+  );
+
+  // Also bust analytics cache since new logs affect analytics totals
+  await invalidatePattern(CacheKeys.myListPattern("analytics", accessId));
 
   return {
     count: createdEntries.count,
@@ -56,7 +71,10 @@ const getBehaviorLogByChild = async (req: Request) => {
   const { date } = req.query; // "2025-06-07"
 
   if (!date || typeof date !== "string") {
-    throw new ApiError(httpStatus.BAD_REQUEST, "date query param is required (YYYY-MM-DD)");
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      "date query param is required (YYYY-MM-DD)",
+    );
   }
 
   const accessId = await getEffectiveAccessId(userId);
@@ -66,7 +84,10 @@ const getBehaviorLogByChild = async (req: Request) => {
   });
 
   if (!child) {
-    throw new ApiError(httpStatus.FORBIDDEN, "You do not have access to this child");
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      "You do not have access to this child",
+    );
   }
 
   // Build day boundaries from client-supplied ISO date (timezone-safe)
@@ -75,27 +96,25 @@ const getBehaviorLogByChild = async (req: Request) => {
 
   const cacheKey = CacheKeys.myList("behaviorLog", accessId, { childId, date });
 
-  const log = await cacheOr(
-    cacheKey,
-    TTL.SHORT,
-    () =>
-      prisma.behaviorLog.findMany({
-        where: {
-          childId,
-          logDate: { gte: startDay, lte: endDay },
-        },
-        select: {
-          id: true,
-          childId: true,
-          behavior: true,
-          logDate: true,
-        },
-        orderBy: { logDate: "desc" },
-      }),
+  const log = await cacheOr(cacheKey, TTL.SHORT, () =>
+    prisma.behaviorLog.findMany({
+      where: {
+        childId,
+        logDate: { gte: startDay, lte: endDay },
+      },
+      select: {
+        id: true,
+        childId: true,
+        behavior: true,
+        logDate: true,
+      },
+      orderBy: { logDate: "desc" },
+    }),
   );
 
   return log;
 };
+
 export const behaviorLogService = {
   createMultipleEntries,
   getBehaviorLogByChild,
