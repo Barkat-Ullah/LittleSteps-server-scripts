@@ -35,6 +35,7 @@ model User {
     children                Children[]              @relation("ChildrenCreator")
     scheduleItems           ScheduleItem[]          @relation("ItemCreator")
     userCompletedActivities UserCompletedActivity[] @relation("CompleteActivity")
+    contact                 Contact[]
 
     @@map("user")
 }

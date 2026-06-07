@@ -19,6 +19,7 @@ import { preferenceSensoryNoteRouter } from "../modules/preferenceSensoryNote/pr
 import { lognoteRouter } from "../modules/lognote/lognote.route";
 import { behaviorLogRouter } from "../modules/behaviorLog/behaviorLog.route";
 import { scheduleItemRouter } from "../modules/scheduleItem/scheduleItem.route";
+import { contactRouter } from "../modules/contact/contact.route";
 
 const router = Router();
 
@@ -50,6 +51,8 @@ router.use("/lognotes", ...secureApiLayer);
 router.use("/lognotes/*", ...secureApiLayer);
 router.use("/log-behavior", ...secureApiLayer);
 router.use("/log-behavior/*", ...secureApiLayer);
+router.use("/contact", ...secureApiLayer);
+router.use("/contact/*", ...secureApiLayer);
 
 router.use(bullBoardBasePath, ...secureApiLayer);
 router.use(`${bullBoardBasePath}/*`, ...secureApiLayer);
@@ -72,6 +75,7 @@ router.use("/preference", preferenceSensoryNoteRouter);
 router.use("/lognotes", lognoteRouter);
 router.use("/log-behavior", behaviorLogRouter);
 router.use("/event", scheduleItemRouter);
+router.use("/contact", contactRouter);
 
 router.use(bullBoardBasePath, bullBoard);
 

@@ -1,13 +1,24 @@
 model Contact {
-    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    id        String        @id @default(auto()) @map("_id") @db.ObjectId
+    userId    String?       @db.ObjectId
     name      String
     email     String
     subject   String
     message   String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+    status    ContactStatus @default(Pending)
+    isDeleted Boolean       @default(false)
+    createdAt DateTime      @default(now())
+    updatedAt DateTime      @updatedAt
+    //relation
+    user      User?         @relation(fields: [userId], references: [id])
 
     @@map("contact")
+}
+
+enum ContactStatus {
+    Pending
+    Inprogress
+    Solved
 }
 
 model Inspire {
