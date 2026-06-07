@@ -61,7 +61,7 @@ model HealthCareNote {
     title       String
     description String?
     note        NoteType?
-    image       String?
+    files       String?
     createdAt   DateTime  @default(now())
     updatedAt   DateTime  @updatedAt
     //relation

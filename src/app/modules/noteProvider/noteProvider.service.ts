@@ -3,7 +3,6 @@ import { Prisma } from "@prisma/client";
 import { Request } from "express";
 import { noteProviderSelect } from "./noteProvider.select";
 import { buildFilterConditions } from "./noteProvider.utils";
-import { handleFileUploads } from "../../../utils/handleFile";
 import prisma from "../../../shared/prisma";
 import { IPaginationOptions } from "../../../interfaces/pagination";
 import { paginationHelper } from "../../../shared/pagination";
@@ -14,7 +13,6 @@ import {
   TTL,
   cacheOr,
 } from "../../../lib/redisConnection";
-import { child } from "winston";
 
 // -------------------------------------------------------
 // create NoteProvider
@@ -167,10 +165,6 @@ const updateNoteProvider = async (req: Request) => {
   const userId = req.user!.id;
   const { id } = req.params;
   const data = req.body;
-  const files = req.files as
-    | { [fieldname: string]: Express.Multer.File[] }
-    | undefined;
-
   const existingNoteProvider = await prisma.noteProvider.findUnique({
     where: { id },
   });
