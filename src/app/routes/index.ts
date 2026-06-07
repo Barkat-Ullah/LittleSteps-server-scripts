@@ -16,6 +16,7 @@ import { childDocumentRouter } from "../modules/childDocument/childDocument.rout
 import { noteProviderRouter } from "../modules/noteProvider/noteProvider.route";
 import { healthCareNoteRouter } from "../modules/healthCareNote/healthCareNote.route";
 import { preferenceSensoryNoteRouter } from "../modules/preferenceSensoryNote/preferenceSensoryNote.route";
+import { lognoteRouter } from "../modules/lognote/lognote.route";
 
 const router = Router();
 
@@ -27,7 +28,6 @@ const secureApiLayer = [apiKeyMiddleware, apiAccessTokenMiddleware];
 // ─────────────────────────────────────────────────────────────────────────────
 router.use("/users", ...secureApiLayer);
 router.use("/users/*", ...secureApiLayer);
-
 router.use("/tasks", ...secureApiLayer);
 router.use("/tasks/*", ...secureApiLayer);
 router.use("/favorites", ...secureApiLayer);
@@ -42,6 +42,8 @@ router.use("/health-care-notes", ...secureApiLayer);
 router.use("/health-care-notes/*", ...secureApiLayer);
 router.use("/preference", ...secureApiLayer);
 router.use("/preference/*", ...secureApiLayer);
+router.use("/lognotes", ...secureApiLayer);
+router.use("/lognotes/*", ...secureApiLayer);
 
 router.use(bullBoardBasePath, ...secureApiLayer);
 router.use(`${bullBoardBasePath}/*`, ...secureApiLayer);
@@ -61,13 +63,13 @@ router.use("/child-documents", childDocumentRouter);
 router.use("/note-providers", noteProviderRouter);
 router.use("/health-care-notes", healthCareNoteRouter);
 router.use("/preference", preferenceSensoryNoteRouter);
+router.use("/lognotes", lognoteRouter);
 
 router.use(bullBoardBasePath, bullBoard);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. CATCH-ALL 404 ROUTE
 // ─────────────────────────────────────────────────────────────────────────────
-
 
 // Catch-all 404   <── add this line
 router.all("*", (req, res) => {
