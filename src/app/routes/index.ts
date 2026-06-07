@@ -18,6 +18,7 @@ import { healthCareNoteRouter } from "../modules/healthCareNote/healthCareNote.r
 import { preferenceSensoryNoteRouter } from "../modules/preferenceSensoryNote/preferenceSensoryNote.route";
 import { lognoteRouter } from "../modules/lognote/lognote.route";
 import { behaviorLogRouter } from "../modules/behaviorLog/behaviorLog.route";
+import { scheduleItemRouter } from "../modules/scheduleItem/scheduleItem.route";
 
 const router = Router();
 
@@ -29,6 +30,8 @@ const secureApiLayer = [apiKeyMiddleware, apiAccessTokenMiddleware];
 // ─────────────────────────────────────────────────────────────────────────────
 router.use("/users", ...secureApiLayer);
 router.use("/users/*", ...secureApiLayer);
+router.use("/event", ...secureApiLayer);
+router.use("/event/*", ...secureApiLayer);
 router.use("/tasks", ...secureApiLayer);
 router.use("/tasks/*", ...secureApiLayer);
 router.use("/favorites", ...secureApiLayer);
@@ -68,13 +71,13 @@ router.use("/health-care-notes", healthCareNoteRouter);
 router.use("/preference", preferenceSensoryNoteRouter);
 router.use("/lognotes", lognoteRouter);
 router.use("/log-behavior", behaviorLogRouter);
+router.use("/event", scheduleItemRouter);
 
 router.use(bullBoardBasePath, bullBoard);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. CATCH-ALL 404 ROUTE
 // ─────────────────────────────────────────────────────────────────────────────
-
 
 // Catch-all 404   <── add this line
 router.all("*", (req, res) => {

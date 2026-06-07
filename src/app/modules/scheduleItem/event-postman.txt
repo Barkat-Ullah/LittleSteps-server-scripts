@@ -1,0 +1,283 @@
+```
+POST /api/schedule-items — Create
+
+//event (single children)
+{
+  "itemType": "Event",
+  "title": "Speech Therapy Session",
+  "description": "Weekly speech therapy with Dr. Ahmed",
+  "childIds": ["64f1a2b3c4d5e6f7a8b9c0d1"],
+  "providerId": "64f1a2b3c4d5e6f7a8b9c0e2",
+  "startDate": "2025-06-01T00:00:00.000Z",
+  "endDate": "2025-06-30T00:00:00.000Z",
+  "startTime": "10:00",
+  "endTime": "11:00",
+  "duration": 60,
+  "days": ["mon", "wed"],
+  "daysPWeek": 2,
+  "weeks": 4,
+  "eventCategory": "Speech_Therapy",
+  "location": "Dhaka Medical Center, Road 5, Dhanmondi",
+  "repeatType": "Weekly",
+  "repeatEndDate": "2025-06-30T00:00:00.000Z",
+  "reminderTime": 30,
+  "isForAllChild": false,
+  "isAddedCalender": true,
+  "notes": "Bring previous session report"
+}
+
+//event (all children)
+
+{
+  "itemType": "Event",
+  "title": "Family Picnic at Ramna Park",
+  "description": "A fun outdoor day for all children",
+  "isForAllChild": true,
+  "startDate": "2025-06-10T00:00:00.000Z",
+  "endDate": "2025-06-10T00:00:00.000Z",
+  "startTime": "10:00",
+  "endTime": "14:00",
+  "duration": 240,
+  "days": [],
+  "skill": [],
+  "eventCategory": "Outdoor_Activity",
+  "location": "Ramna Park, Dhaka",
+  "repeatType": "None",
+  "notes": "Bring sunscreen and snacks",
+  "isAddedCalender": true
+}
+
+{
+  "itemType": "Event",
+  "title": "Morning Circle Time",
+  "isForAllChild": true,
+  "childIds": [],
+  "startDate": "2025-06-01T00:00:00.000Z",
+  "endDate": "2025-06-30T00:00:00.000Z",
+  "days": ["sun", "mon", "wed"],
+  "daysPWeek": 3,
+  "startTime": "09:00",
+  "endTime": "09:30",
+  "eventCategory": "Learning_Activity",
+  "repeatType": "Weekly",
+  "skill": []
+}
+
+//activity (single children)
+{
+  "itemType": "Activity",
+  "title": "Sensory Bin Play",
+  "description": "Exploring textures with rice and beans",
+  "childIds": ["64f1a2b3c4d5e6f7a8b9c0d1"],
+  "startDate": "2025-06-01T00:00:00.000Z",
+  "endDate": "2025-06-30T00:00:00.000Z",
+  "startTime": "09:00",
+  "endTime": "09:30",
+  "duration": 30,
+  "days": ["tue", "thu", "sat"],
+  "daysPWeek": 3,
+  "stage": "Emerging",
+  "activityType": "Move_and_Play",
+  "skill": ["Fine Motor", "Sensory Processing"],
+  "materials": "Rice, beans, small containers, scoops",
+  "howToDoIt": "Fill bin with rice. Add small toys. Let child explore freely.",
+  "whatItHelpsWith": "Sensory tolerance, fine motor skills, focus",
+  "isForAllChild": false,
+  "isAddedCalender": false,
+  "notes": "Supervise closely to avoid ingestion"
+}
+
+//activity (For all children)
+
+{
+  "itemType": "Event",
+  "title": "Family Outing",
+  "isForAllChild": true,
+  "childIds": [],
+  "days": [],
+  "skill": [],
+  "startDate": "2025-06-07T00:00:00.000Z",
+  "endDate": "2025-06-07T00:00:00.000Z",
+  "startTime": "14:00",
+  "endTime": "17:00",
+  "eventCategory": "Family_Event",
+  "repeatType": "None"
+}
+
+```
+
+---
+
+## GET `/api/schedule-items/by-date` — Day view (main calendar screen)
+
+| Param | Type | Required | Example |
+|---|---|---|---|
+| `date` | `YYYY-MM-DD` | ✅ | `2025-06-07` |
+| `childId` | ObjectId string | ❌ | `64f1a2b3c4d5e6f7a8b9c0d1` |
+| `itemType` | `Event` \| `Activity` | ❌ | `Event` |
+| `status` | `Pending` \| `Completed` | ❌ | `Pending` |
+| `searchTerm` | string | ❌ | `therapy` |
+| `page` | number | ❌ | `1` |
+| `limit` | number | ❌ | `10` |
+
+```
+GET /api/schedule-items/by-date?date=2025-06-07&page=1&limit=10
+GET /api/schedule-items/by-date?date=2025-06-07&childId=64f1a2b3c4d5e6f7a8b9c0d1
+GET /api/schedule-items/by-date?date=2025-06-07&itemType=Activity
+GET /api/schedule-items/by-date?date=2025-06-07&status=Pending&itemType=Event
+```
+
+**Response shape:**
+```json
+{
+  "success": true,
+  "message": "ScheduleItems retrieved successfully for the given date",
+  "meta": {
+    "total": 5,
+    "page": 1,
+    "limit": 10,
+    "completedToday": 2
+  },
+  "data": [
+    {
+      "id": "64f1a2b3c4d5e6f7a8b9c0d1",
+      "itemType": "Event",
+      "title": "Speech Therapy Session",
+      "status": "Pending",
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "isCompleted": false,
+      "child": { "id": "...", "fullName": "Aayan", "image": null },
+      "provider": { "id": "...", "fullName": "Dr. Ahmed" }
+    }
+  ]
+}
+```
+
+---
+
+## GET `/api/schedule-items/monthly` — Calendar dot indicators
+
+| Param | Type | Required | Example |
+|---|---|---|---|
+| `month` | `YYYY-MM` | ✅ | `2025-06` |
+
+```
+GET /api/schedule-items/monthly?month=2025-06
+```
+
+**Response shape:**
+```json
+{
+  "success": true,
+  "data": {
+    "month": "2025-06",
+    "daysInMonth": 30,
+    "data": [
+      { "date": "2025-06-01", "hasItems": false, "categories": [], "types": [] },
+      { "date": "2025-06-02", "hasItems": true, "categories": ["Speech_Therapy"], "types": ["Event"] },
+      { "date": "2025-06-03", "hasItems": true, "categories": [], "types": ["Activity"] }
+    ]
+  }
+}
+```
+
+---
+
+## GET `/api/schedule-items/my` — User's own list (management screen)
+
+```
+GET /api/schedule-items/my?page=1&limit=10
+GET /api/schedule-items/my?status=Pending
+GET /api/schedule-items/my?itemType=Activity
+GET /api/schedule-items/my?searchTerm=therapy&page=1&limit=5
+GET /api/schedule-items/my?createdAt=2025-06
+GET /api/schedule-items/my?createdAt=2025-06-07
+```
+
+---
+
+## GET `/api/schedule-items` — Global list (admin)
+
+```
+GET /api/schedule-items?page=1&limit=20
+GET /api/schedule-items?status=Completed
+GET /api/schedule-items?searchTerm=sensory
+```
+
+---
+
+## GET `/api/schedule-items/:id` — Single record
+
+```
+GET /api/schedule-items/64f1a2b3c4d5e6f7a8b9c0d1
+```
+
+---
+
+## PUT `/api/schedule-items/:id` — Update (partial fields only)
+
+**Update event time + days:**
+```json
+{
+  "startTime": "11:00",
+  "endTime": "12:00",
+  "days": ["tue", "fri"],
+  "daysPWeek": 2
+}
+```
+
+**Reassign to different child:**
+```json
+{
+  "childIds": ["64f1a2b3c4d5e6f7a8b9c0d2"],
+  "isForAllChild": false
+}
+```
+
+**Expand to all children:**
+```json
+{
+  "isForAllChild": true
+}
+```
+
+**Update activity skills:**
+```json
+{
+  "skill": ["Fine Motor", "Eye-Hand Coordination"],
+  "materials": "Updated: playdough, rolling pin",
+  "stage": "Growing"
+}
+```
+
+---
+
+## PATCH `/api/schedule-items/toggle-status/:id` — Toggle Pending ↔ Completed
+
+```
+PATCH /api/schedule-items/toggle-status/64f1a2b3c4d5e6f7a8b9c0d1
+```
+No body needed.
+
+---
+
+## DELETE `/api/schedule-items/soft-delete/:id` — Soft delete
+
+```
+DELETE /api/schedule-items/soft-delete/64f1a2b3c4d5e6f7a8b9c0d1
+```
+No body needed.
+
+---
+
+## DELETE `/api/schedule-items/:id` — Hard delete
+
+```
+DELETE /api/schedule-items/64f1a2b3c4d5e6f7a8b9c0d1
+```
+No body needed.
+
+---
+
+**One important router note** — in your router, `toggle-status/:id` and `soft-delete/:id` must be declared **before** `/:id`, otherwise Express will match the literal strings `toggle-status` and `soft-delete` as the `:id` param. Your current router already does this correctly.
