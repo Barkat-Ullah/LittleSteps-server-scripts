@@ -17,6 +17,7 @@ import { noteProviderRouter } from "../modules/noteProvider/noteProvider.route";
 import { healthCareNoteRouter } from "../modules/healthCareNote/healthCareNote.route";
 import { preferenceSensoryNoteRouter } from "../modules/preferenceSensoryNote/preferenceSensoryNote.route";
 import { lognoteRouter } from "../modules/lognote/lognote.route";
+import { behaviorLogRouter } from "../modules/behaviorLog/behaviorLog.route";
 
 const router = Router();
 
@@ -44,6 +45,8 @@ router.use("/preference", ...secureApiLayer);
 router.use("/preference/*", ...secureApiLayer);
 router.use("/lognotes", ...secureApiLayer);
 router.use("/lognotes/*", ...secureApiLayer);
+router.use("/log-behavior", ...secureApiLayer);
+router.use("/log-behavior/*", ...secureApiLayer);
 
 router.use(bullBoardBasePath, ...secureApiLayer);
 router.use(`${bullBoardBasePath}/*`, ...secureApiLayer);
@@ -64,12 +67,14 @@ router.use("/note-providers", noteProviderRouter);
 router.use("/health-care-notes", healthCareNoteRouter);
 router.use("/preference", preferenceSensoryNoteRouter);
 router.use("/lognotes", lognoteRouter);
+router.use("/log-behavior", behaviorLogRouter);
 
 router.use(bullBoardBasePath, bullBoard);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. CATCH-ALL 404 ROUTE
 // ─────────────────────────────────────────────────────────────────────────────
+
 
 // Catch-all 404   <── add this line
 router.all("*", (req, res) => {
