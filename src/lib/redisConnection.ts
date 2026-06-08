@@ -20,7 +20,7 @@ export const redisOptions: RedisOptions = {
 
   connectTimeout: 10_000,
   lazyConnect: true,
-  maxRetriesPerRequest: null, // set to null instead of 3
+  maxRetriesPerRequest: null,
   enableReadyCheck: true,
   keepAlive: 10_000,
   commandTimeout: 5_000,

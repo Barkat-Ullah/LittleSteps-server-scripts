@@ -88,7 +88,7 @@ const createScheduleItem = async (req: Request) => {
   const accessId = await resolveAccessId(userId);
   const uploadedFiles = await handleFileUploads(files);
 
-  // ── Provider validation (result check করা হচ্ছে এখন) ──
+  // ── Provider validation  ──
   if (data.providerId) {
     const provider = await prisma.noteProvider.findUnique({
       where: { id: data.providerId },
@@ -96,14 +96,18 @@ const createScheduleItem = async (req: Request) => {
     });
 
     if (!provider) {
-      throw new ApiError(httpStatus.NOT_FOUND, 'Provider not found');
+      throw new ApiError(httpStatus.NOT_FOUND, "Provider not found");
     }
   }
 
   // ── Child validation ──
   if (!data.isForAllChild && data.childIds?.length) {
     const validChildren = await prisma.children.findMany({
-      where: { id: { in: data.childIds }, creatorId: accessId, isDeleted: false },
+      where: {
+        id: { in: data.childIds },
+        creatorId: accessId,
+        isDeleted: false,
+      },
       select: { id: true },
     });
 
@@ -115,7 +119,7 @@ const createScheduleItem = async (req: Request) => {
     if (invalidIds.length > 0) {
       throw new ApiError(
         httpStatus.NOT_FOUND,
-        `Invalid child IDs: ${invalidIds.join(', ')}. These children do not exist or belong to another user.`,
+        `Invalid child IDs: ${invalidIds.join(", ")}. These children do not exist or belong to another user.`,
       );
     }
   }
@@ -130,7 +134,10 @@ const createScheduleItem = async (req: Request) => {
     });
 
     if (myChildren.length === 0) {
-      throw new ApiError(httpStatus.NOT_FOUND, 'No children found for this user to assign.');
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "No children found for this user to assign.",
+      );
     }
 
     finalChildIds = myChildren.map((c) => c.id);
@@ -140,47 +147,47 @@ const createScheduleItem = async (req: Request) => {
   const result = await prisma.scheduleItem.create({
     data: {
       // ownership
-      userId:       accessId,
+      userId: accessId,
       // relations
-      childIds:     finalChildIds,
-      children:     { connect: finalChildIds.map((id) => ({ id })) },
-      providerId:   data.providerId ?? null,          // ← explicit
+      childIds: finalChildIds,
+      children: { connect: finalChildIds.map((id) => ({ id })) },
+      providerId: data.providerId ?? null,
       // shared
-      itemType:     data.itemType,
-      title:        data.title,
-      description:  data.description   ?? null,
-      image:        uploadedFiles.image ?? null,
-      link:         data.link           ?? null,
-      fileUrl:      data.fileUrl        ?? null,
-      notes:        data.notes          ?? null,
-      startDate:    data.startDate      ? new Date(data.startDate) : null,
-      endDate:      data.endDate        ? new Date(data.endDate)   : null,
-      startTime:    data.startTime      ?? null,
-      endTime:      data.endTime        ?? null,
-      duration:     data.duration       ? Number(data.duration)    : null,
-      daysPWeek:    data.daysPWeek      ? Number(data.daysPWeek)   : null,
-      days:         data.days           ?? [],
+      itemType: data.itemType,
+      title: data.title,
+      description: data.description ?? null,
+      image: uploadedFiles.image ?? null,
+      link: data.link ?? null,
+      fileUrl: data.fileUrl ?? null,
+      notes: data.notes ?? null,
+      startDate: data.startDate ? new Date(data.startDate) : null,
+      endDate: data.endDate ? new Date(data.endDate) : null,
+      startTime: data.startTime ?? null,
+      endTime: data.endTime ?? null,
+      duration: data.duration ? Number(data.duration) : null,
+      daysPWeek: data.daysPWeek ? Number(data.daysPWeek) : null,
+      days: data.days ?? [],
       isAddedCalender: data.isAddedCalender ?? false,
-      isForAllChild:   data.isForAllChild   ?? false,
+      isForAllChild: data.isForAllChild ?? false,
       // event-specific
-      eventCategory:  data.eventCategory  ?? null,
-      location:       data.location       ?? null,
-      weeks:          data.weeks          ? Number(data.weeks) : null,
-      reminderTime:   data.reminderTime   ? Number(data.reminderTime) : null,
-      repeatType:     data.repeatType     ?? 'None',
-      repeatEndDate:  data.repeatEndDate  ? new Date(data.repeatEndDate) : null,
+      eventCategory: data.eventCategory ?? null,
+      location: data.location ?? null,
+      weeks: data.weeks ? Number(data.weeks) : null,
+      reminderTime: data.reminderTime ? Number(data.reminderTime) : null,
+      repeatType: data.repeatType ?? "None",
+      repeatEndDate: data.repeatEndDate ? new Date(data.repeatEndDate) : null,
       // activity-specific
-      stage:           data.stage           ?? null,
-      activityType:    data.activityType    ?? null,
-      skill:           data.skill           ?? [],
-      materials:       data.materials       ?? null,
-      howToDoIt:       data.howToDoIt       ?? null,
+      stage: data.stage ?? null,
+      activityType: data.activityType ?? null,
+      skill: data.skill ?? [],
+      materials: data.materials ?? null,
+      howToDoIt: data.howToDoIt ?? null,
       whatItHelpsWith: data.whatItHelpsWith ?? null,
     },
     select: scheduleItemSelect,
   });
 
-  await CacheInvalidator.onRecordCreate('scheduleItem');
+  await CacheInvalidator.onRecordCreate("scheduleItem");
 
   return result;
 };
@@ -341,7 +348,18 @@ const getScheduleItemListByDate = async (
           select: { id: true, fullName: true, image: true },
         },
         user: {
-          select: { id: true, fullName: true, image: true, role: true },
+          select: {
+            id: true,
+            role: true,
+            userDetails: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                files: true,
+              },
+            },
+          },
         },
         userCompletedActivities: {
           select: { isCompleted: true },
@@ -585,7 +603,18 @@ const getScheduleItemById = async (req: Request) => {
           },
         },
         user: {
-          select: { id: true, fullName: true, image: true, role: true },
+          select: {
+            id: true,
+            role: true,
+            userDetails: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                files: true,
+              },
+            },
+          },
         },
       },
     });

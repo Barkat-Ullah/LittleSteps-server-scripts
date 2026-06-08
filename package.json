@@ -1,5 +1,5 @@
 {
-  "name": "express-js-starter-2025-dec",
+  "name": "little-step-server",
   "type": "module",
   "prisma": {
     "schema": "./prisma"

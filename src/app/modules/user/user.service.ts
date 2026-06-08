@@ -125,15 +125,13 @@ const getMyProfileFromDB = async (userId: string) => {
 
 const updateMyProfileIntoDb = async (req: Request) => {
   const userId = req.user!.id;
-  const data = req.body; // রিকোয়েস্ট থেকে ডাটা নেওয়া হলো
+  const data = req.body;
   const files = req.files as
     | { [fieldname: string]: Express.Multer.File[] }
     | undefined;
 
-  // ১. ফাইল আপলোড হ্যান্ডেল করা
   const uploadedFiles = await handleFileUploads(files);
 
-  // ২. ইউজার আদৌ ডাটাবেজে আছে কিনা চেক করা
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw new ApiError(
@@ -142,32 +140,42 @@ const updateMyProfileIntoDb = async (req: Request) => {
     );
   }
 
-  // ৩. 'data' (payload নয়) থেকে ফিল্ডগুলো ডিস্ট্রাকচার করা
-  const { firstName, lastName, address, phone, dob, educationLevel, employmentStatus, parentingGoal, supportSystem, relation } = data;
-  
+  const {
+    firstName,
+    lastName,
+    address,
+    phone,
+    dob,
+    educationLevel,
+    employmentStatus,
+    parentingGoal,
+    supportSystem,
+    relation,
+  } = data;
+
   const userData: Prisma.UserUpdateInput = {};
   const userDetailsData: Record<string, any> = {};
 
-  // ৪. ডিফাইনড ভ্যালুগুলো অবজেক্টে পুশ করা
   if (firstName !== undefined) userDetailsData.firstName = firstName;
   if (lastName !== undefined) userDetailsData.lastName = lastName;
   if (address !== undefined) userDetailsData.address = address;
   if (phone !== undefined) userDetailsData.phone = phone;
-  
-  // অন্যান্য সম্ভাব্য ফিল্ড (অপশনাল, চাইলে রাখতে পারো)
+
   if (dob !== undefined) userDetailsData.dob = dob ? new Date(dob) : null;
-  if (educationLevel !== undefined) userDetailsData.educationLevel = educationLevel;
-  if (employmentStatus !== undefined) userDetailsData.employmentStatus = employmentStatus;
-  if (parentingGoal !== undefined) userDetailsData.parentingGoal = parentingGoal;
-  if (supportSystem !== undefined) userDetailsData.supportSystem = supportSystem;
+  if (educationLevel !== undefined)
+    userDetailsData.educationLevel = educationLevel;
+  if (employmentStatus !== undefined)
+    userDetailsData.employmentStatus = employmentStatus;
+  if (parentingGoal !== undefined)
+    userDetailsData.parentingGoal = parentingGoal;
+  if (supportSystem !== undefined)
+    userDetailsData.supportSystem = supportSystem;
   if (relation !== undefined) userDetailsData.relation = relation;
 
-  // ৫. আপলোড করা ফাইলের স্ট্রিং/URL 'files' ফিল্ডে যুক্ত করা
   if (uploadedFiles) {
-    userDetailsData.files = uploadedFiles; // handleFileUploads যেভাবে রিটার্ন করে (string বা array)
+    userDetailsData.files = uploadedFiles;
   }
 
-  // 👑 ডাটাবেজ আপডেট অপারেশন
   const result = await prisma.user.update({
     where: { id: userId },
     data: {
@@ -282,8 +290,6 @@ const softDeleteUserById = async (id: string) => {
 
     // ✅ Cache delete
     redis.del(`user:${id}`),
-
-    // ✅ Kill all active sessions
     prisma.userSession.deleteMany({ where: { userId: id } }),
   ]);
 
@@ -300,7 +306,7 @@ const updateUserIntoDb = async (payload: any, id: string) => {
     throw new ApiError(httpStatus.NOT_FOUND, `User not found with id: ${id}`);
   }
 
-  const { role, firstName, lastName, address, phone } = payload;
+  const { firstName, lastName, address, phone } = payload;
   const userData: Prisma.UserUpdateInput = {};
   const userDetailsData: {
     firstName?: string | null;
@@ -308,10 +314,6 @@ const updateUserIntoDb = async (payload: any, id: string) => {
     address?: string | null;
     phone?: string | null;
   } = {};
-
-  if (role !== undefined) {
-    userData.role = role as userRole;
-  }
 
   if (firstName !== undefined) {
     userDetailsData.firstName = firstName;
