@@ -1,6 +1,70 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# LittleSteps — Command Reference
+# ─────────────────────────────────────────────────────────────────────────────
 
-npm run generate test
 
-npm run generate -- test --sync
-npm run generate -- test --sync-select
-npm run generate -- test --sync-validation
+# ─────────────────────────────────────────────
+# Module Generator
+# ─────────────────────────────────────────────
+
+npm run generate -- <moduleName>                        # Generate new module
+npm run generate -- <moduleName> --sync                 # Generate + sync all fields
+npm run generate -- <moduleName> --sync-select          # Generate + sync selected fields
+npm run generate -- <moduleName> --sync-validation      # Generate + sync with validation
+
+
+# ─────────────────────────────────────────────
+# Docker — Build & Run
+# ─────────────────────────────────────────────
+
+docker compose up --build                               # Build + start (foreground)
+docker compose up --build -d                            # Build + start (background)
+docker compose up                                       # Start already-built (background)
+docker compose down                                     # Stop all containers
+docker compose down -v                                  # Stop + wipe all volumes (fresh DB)
+
+
+# ─────────────────────────────────────────────
+# Docker — Monitoring
+# ─────────────────────────────────────────────
+
+docker compose ps                                       # See running containers
+docker compose logs -f app                              # Follow app logs
+docker compose logs -f mongo                            # Follow mongo logs
+docker compose logs -f redis                            # Follow redis logs
+
+
+# ─────────────────────────────────────────────
+# Docker — Debugging
+# ─────────────────────────────────────────────
+
+docker compose exec app sh                              # Shell into app container
+docker compose exec mongo mongosh                       # Mongo shell
+docker compose exec redis redis-cli                     # Redis CLI
+docker compose restart app                              # Restart only app container
+
+
+# ─────────────────────────────────────────────
+# Docker — Image & Cache
+# ─────────────────────────────────────────────
+
+docker compose build --no-cache                         # Force full rebuild (no cache)
+docker image prune -f                                   # Remove dangling images
+docker system prune -af                                 # Remove everything unused (careful)
+
+
+# ─────────────────────────────────────────────
+# Prisma
+# ─────────────────────────────────────────────
+
+npm run pg                                              # prisma generate
+npm run pm                                              # prisma migrate dev
+
+
+# ─────────────────────────────────────────────
+# Dev (without Docker)
+# ─────────────────────────────────────────────
+
+npm run dev                                             # Start dev server (tsx watch)
+npm run build                                           # Compile TypeScript → dist/
+npm run start                                           # Start compiled server
