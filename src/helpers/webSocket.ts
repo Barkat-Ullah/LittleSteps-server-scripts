@@ -4,7 +4,7 @@ import { Secret } from "jsonwebtoken";
 import prisma from "../shared/prisma";
 import { config } from "../config";
 import { jwtHelpers } from "./jwtHelpers";
-import { isTokenBlacklisted } from "../lib/redisConnection";
+import { isTokenBlacklisted, redis, TTL } from "../lib/redisConnection";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -37,6 +37,8 @@ type IncomingMessage =
 
 export const onlineUsers = new Set<string>();
 const userSockets = new Map<string, ExtendedWebSocket>();
+
+const ONLINE_PROFILE_HASH = "ws:online_user_profiles";
 
 const userSelect = {
   id: true,
@@ -71,6 +73,8 @@ const formatUser = (user: {
   avatar: user.userDetails?.files ?? null,
 });
 
+type FormattedUser = ReturnType<typeof formatUser>;
+
 const chatSelect = {
   id: true,
   message: true,
@@ -80,6 +84,23 @@ const chatSelect = {
   createdAt: true,
   sender: { select: userSelect },
   receiver: { select: userSelect },
+} as const;
+
+// Only needed for the messageList "last message per room" query, where we
+// have to map results back onto rooms by roomId.
+const chatSelectWithRoom = {
+  ...chatSelect,
+  roomId: true,
+} as const;
+
+const groupChatSelect = {
+  id: true,
+  groupId: true,
+  message: true,
+  fileUrl: true,
+  fileName: true,
+  createdAt: true,
+  sender: { select: userSelect },
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -127,6 +148,72 @@ async function markRoomAsRead(roomId: string, receiverId: string) {
   });
 }
 
+function broadcastToGroupMembers(memberIds: string[], event: string, data: unknown) {
+  for (const memberId of memberIds) {
+    const socket = userSockets.get(memberId);
+    if (socket) sendToSocket(socket, event, data);
+  }
+}
+
+async function cacheUserProfile(user: FormattedUser) {
+  try {
+    await redis.hset(ONLINE_PROFILE_HASH, user.id, JSON.stringify(user));
+  } catch (err) {
+    console.error("Failed to cache online user profile in Redis:", err);
+  }
+}
+
+async function removeUserProfile(userId: string) {
+  try {
+    await redis.hdel(ONLINE_PROFILE_HASH, userId);
+  } catch (err) {
+    console.error("Failed to remove online user profile from Redis:", err);
+  }
+}
+
+async function getOnlineUserProfiles(userIds: string[]): Promise<FormattedUser[]> {
+  if (userIds.length === 0) return [];
+
+  try {
+    const cached = await redis.hmget(ONLINE_PROFILE_HASH, ...userIds);
+    const profiles: FormattedUser[] = [];
+    const missingIds: string[] = [];
+
+    cached.forEach((value, index) => {
+      if (value) {
+        profiles.push(JSON.parse(value));
+      } else {
+        missingIds.push(userIds[index]);
+      }
+    });
+
+    // Cache miss (e.g. cold start, flush, or profile written before this
+    // deploy) — backfill from DB just for the missing ids, not all of them.
+    if (missingIds.length > 0) {
+      const dbUsers = await prisma.user.findMany({
+        where: { id: { in: missingIds } },
+        select: userSelect,
+      });
+
+      for (const dbUser of dbUsers) {
+        const formatted = formatUser(dbUser);
+        profiles.push(formatted);
+        cacheUserProfile(formatted); // fire-and-forget backfill
+      }
+    }
+
+    return profiles;
+  } catch (err) {
+    // Redis down — fall back to DB so the feature still works.
+    console.error("Redis unavailable, falling back to DB for online users:", err);
+    const dbUsers = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: userSelect,
+    });
+    return dbUsers.map(formatUser);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Setup WebSocket
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +230,7 @@ export async function setupWebSocket(server: Server) {
         if (ws.userId) {
           onlineUsers.delete(ws.userId);
           userSockets.delete(ws.userId);
+          removeUserProfile(ws.userId);
           broadcastToAll(wss, {
             event: "userStatus",
             data: { userId: ws.userId, isOnline: false },
@@ -216,9 +304,12 @@ export async function setupWebSocket(server: Server) {
               ws.close();
               return;
             }
+
+            // Single query: pull both the auth-check fields AND the profile
+            // fields we need to cache for the onlineUsers list.
             const user = await prisma.user.findUnique({
               where: { id: decoded.id },
-              select: { id: true, role: true, status: true, isDeleted: true },
+              select: { ...userSelect, status: true, isDeleted: true },
             });
 
             if (!user || user.isDeleted) {
@@ -239,6 +330,9 @@ export async function setupWebSocket(server: Server) {
 
             onlineUsers.add(ws.userId);
             userSockets.set(ws.userId, ws);
+
+            const formattedProfile = formatUser(user);
+            await cacheUserProfile(formattedProfile);
 
             sendToSocket(ws, "authenticated", { userId: ws.userId });
 
@@ -338,12 +432,10 @@ export async function setupWebSocket(server: Server) {
 
           // ── Online Users ─────────────────────────────────────────────────
           case "onlineUsers": {
-            const users = await prisma.user.findMany({
-              where: { id: { in: Array.from(onlineUsers) } },
-              select: userSelect,
-            });
-
-            sendToSocket(ws, "onlineUsers", users.map(formatUser));
+            // No DB hit — reads from the Redis profile cache, with a DB
+            // fallback baked into getOnlineUserProfiles for cold/missing entries.
+            const profiles = await getOnlineUserProfiles(Array.from(onlineUsers));
+            sendToSocket(ws, "onlineUsers", profiles);
             break;
           }
 
@@ -383,6 +475,8 @@ export async function setupWebSocket(server: Server) {
 
           // ── Message List (conversation sidebar) ─────────────────────────
           case "messageList": {
+            // Step 1: fetch rooms WITHOUT a nested chat include (no per-room
+            // subquery/lateral join).
             const rooms = await prisma.room.findMany({
               where: {
                 OR: [
@@ -390,25 +484,42 @@ export async function setupWebSocket(server: Server) {
                   { receiverId: ws.userId! },
                 ],
               },
-              include: {
-                // last message
-                chat: {
-                  orderBy: { createdAt: "desc" },
-                  take: 1,
-                  select: chatSelect,
-                },
-                // sender info
+              select: {
+                id: true,
+                senderId: true,
+                receiverId: true,
                 sender: { select: userSelect },
-                // receiver info
                 receiver: { select: userSelect },
               },
               orderBy: { updatedAt: "desc" },
             });
 
+            if (rooms.length === 0) {
+              sendToSocket(ws, "messageList", []);
+              return;
+            }
+
+            const roomIds = rooms.map((room) => room.id);
+
+            // Step 2: one flat query for the latest message per room, using
+            // distinct + orderBy (Postgres DISTINCT ON under the hood) instead
+            // of N nested `take: 1` subqueries. This is what the
+            // @@index([roomId, createdAt]) composite index is for.
+            const lastMessages = await prisma.chat.findMany({
+              where: { roomId: { in: roomIds } },
+              orderBy: [{ roomId: "asc" }, { createdAt: "desc" }],
+              distinct: ["roomId"],
+              select: chatSelectWithRoom,
+            });
+
+            const lastMessageByRoom = new Map(
+              lastMessages.map((message) => [message.roomId, message]),
+            );
+
             const messageList = rooms.map((room) => {
               const isCurrentUserSender = room.senderId === ws.userId;
               const otherUser = isCurrentUserSender ? room.receiver : room.sender;
-              const lastMessage = room.chat[0] ?? null;
+              const lastMessage = lastMessageByRoom.get(room.id) ?? null;
 
               return {
                 roomId: room.id,
@@ -442,6 +553,7 @@ export async function setupWebSocket(server: Server) {
       if (ws.userId) {
         onlineUsers.delete(ws.userId);
         userSockets.delete(ws.userId);
+        removeUserProfile(ws.userId);
 
         broadcastToAll(wss, {
           event: "userStatus",

@@ -13,8 +13,8 @@ services:
     env_file:
       - .env
     environment:
-      NODE_ENV: production         # Hard override — .env cannot downgrade this
-      REDIS_HOST: redis            # Always use container name, not 127.0.0.1
+      NODE_ENV: production        
+      REDIS_HOST: redis            
       REDIS_PORT: 6379
     depends_on:
       mongo:
