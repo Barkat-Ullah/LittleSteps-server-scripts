@@ -2,24 +2,116 @@ import prisma from "../../../shared/prisma";
 import { cacheOr, CacheKeys, TTL } from "../../../lib/redisConnection";
 
 export type AnalyticsPeriod = "week" | "month";
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type LogEntry = { behavior: string; logDate: Date };
+
+// ─── Potty ───────────────────────────────────────────────────────────────────
+
+const SUCCESS_BEHAVIORS = new Set([
+  "#1 in potty",
+  "#2 in potty",
+  "Used Potty Unassisted",
+  "Potty Trained / Used Potty",
+]);
+
+const ATTEMPT_BEHAVIORS = new Set([
+  "Potty Attempted",
+  "Indicated Need for Toilet",
+  "Initiated Potty Use",
+  "Sat on potty",
+]);
+
+function computePottyProgress(logs: LogEntry[]) {
+  const relevant = logs.filter(
+    (e) =>
+      SUCCESS_BEHAVIORS.has(e.behavior) || ATTEMPT_BEHAVIORS.has(e.behavior),
+  );
+
+  const successes = relevant.filter((e) =>
+    SUCCESS_BEHAVIORS.has(e.behavior),
+  ).length;
+  const attempts = relevant.filter((e) =>
+    ATTEMPT_BEHAVIORS.has(e.behavior),
+  ).length;
+  const totalAttempts = successes + attempts;
+
+  return {
+    percentage: `${totalAttempts > 0 ? Math.round((successes / totalAttempts) * 100) : 0}%`,
+    successes,
+    attempts: totalAttempts,
+  };
+}
+
+// ─── Foods ───────────────────────────────────────────────────────────────────
+
+function computeNewFoods(logs: LogEntry[]) {
+  const foodLogs = logs.filter((e) => e.behavior.startsWith("Tried "));
+
+  const foods = new Set<string>();
+  const list = foodLogs.map((e) => {
+    const food = e.behavior.replace("Tried ", "").trim();
+    foods.add(food);
+    return {
+      food,
+      day: e.logDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        timeZone: "UTC",
+      }),
+    };
+  });
+
+  return {
+    count: foods.size,
+    foods: Array.from(foods),
+    list,
+  };
+}
+
+// ─── Positive Moments ────────────────────────────────────────────────────────
+
+const POSITIVE_BEHAVIORS = new Set([
+  "Comfortable during care",
+  "Cooperated with routine",
+  "Indicated need for change",
+]);
+
+function computePositiveMoments(logs: LogEntry[]) {
+  const relevant = logs.filter((e) => POSITIVE_BEHAVIORS.has(e.behavior));
+
+  const counts: Record<string, number> = {};
+  relevant.forEach((e) => {
+    counts[e.behavior] = (counts[e.behavior] || 0) + 1;
+  });
+
+  return {
+    total: relevant.length,
+    breakdown: counts,
+  };
+}
+
+// ─── Calm ────────────────────────────────────────────────────────────────────
+
+function computeCalmStack(logs: LogEntry[]) {
+  return {
+    totalCalm: logs.filter((e) => e.behavior.startsWith("Calm ")).length,
+  };
+}
 
 const getAnalyticsByPeriod = async (
   childId: string,
   accessId: string,
   period: AnalyticsPeriod = "week",
-  referenceDate: string, // client sends "YYYY-MM-DD" in their local timezone
+  referenceDate: string,
 ) => {
-  // Parse client date in UTC to avoid server timezone drift
   const [year, month, day] = referenceDate.split("-").map(Number);
 
   let startDate: Date;
   let endDate: Date;
 
   if (period === "week") {
-    // Build a UTC date from client's reference, then find Sunday of that week
     const ref = new Date(Date.UTC(year, month - 1, day));
-    const dayOfWeek = ref.getUTCDay(); // 0=Sun, 6=Sat
-
+    const dayOfWeek = ref.getUTCDay();
     startDate = new Date(
       Date.UTC(year, month - 1, day - dayOfWeek, 0, 0, 0, 0),
     );
@@ -27,43 +119,42 @@ const getAnalyticsByPeriod = async (
       Date.UTC(year, month - 1, day - dayOfWeek + 6, 23, 59, 59, 999),
     );
   } else {
-    // First and last day of the month the referenceDate falls in
     startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
-    endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); // day 0 of next month = last day of this month
+    endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
   }
 
   const cacheKey = CacheKeys.myList("analytics", accessId, {
     childId,
     period,
-    referenceDate, // e.g. "2025-06-07" — week/month boundaries are derived from this
+    referenceDate,
   });
 
-  const result = await cacheOr(
-    cacheKey,
-    TTL.SHORT, // 5 min — analytics can change as new behavior logs are added
-    async () => {
-      const [potty, foods, positive, calm] = await Promise.all([
-        getPottyProgress(childId, startDate, endDate),
-        getNewFoodsThisWeek(childId, startDate, endDate),
-        getPositiveMoments(childId, startDate, endDate),
-        getCalmStack(childId, startDate, endDate),
-      ]);
+  return cacheOr(cacheKey, TTL.SHORT, async () => {
+    // ✅ একটাই query — সব relevant behavior logs একসাথে আনো
+    const allLogs = await prisma.behaviorLog.findMany({
+      where: {
+        childId,
+        logDate: { gte: startDate, lte: endDate },
+      },
+      select: {
+        behavior: true,
+        logDate: true,
+      },
+    });
 
-      return {
-        period,
-        range: {
-          start: startDate.toISOString(),
-          end: endDate.toISOString(),
-        },
-        potty,
-        foods,
-        positive,
-        calm,
-      };
-    },
-  );
-
-  return result;
+    // ✅ এরপর in-memory partition — আলাদা DB call নেই
+    return {
+      period,
+      range: {
+        start: startDate.toISOString(),
+        end: endDate.toISOString(),
+      },
+      potty: computePottyProgress(allLogs),
+      foods: computeNewFoods(allLogs),
+      positive: computePositiveMoments(allLogs),
+      calm: computeCalmStack(allLogs),
+    };
+  });
 };
 
 //TODO :i will do it lated
@@ -72,124 +163,125 @@ const getAnalyticsArticleByPeriod = async (
   period: AnalyticsPeriod = "week",
 ) => {};
 
-const getPottyProgress = async (childId: string, start: Date, end: Date) => {
-  const SUCCESS_BEHAVIORS = [
-    "#1 in potty",
-    "#2 in potty",
-    "Used Potty Unassisted",
-    "Potty Trained / Used Potty",
-  ];
+// const getPottyProgress = async (childId: string, start: Date, end: Date) => {
+//   const SUCCESS_BEHAVIORS = [
+//     "#1 in potty",
+//     "#2 in potty",
+//     "Used Potty Unassisted",
+//     "Potty Trained / Used Potty",
+//   ];
 
-  const ATTEMPT_BEHAVIORS = [
-    "Potty Attempted",
-    "Indicated Need for Toilet",
-    "Initiated Potty Use",
-    "Sat on potty",
-  ];
+//   const ATTEMPT_BEHAVIORS = [
+//     "Potty Attempted",
+//     "Indicated Need for Toilet",
+//     "Initiated Potty Use",
+//     "Sat on potty",
+//   ];
 
-  const entries = await prisma.behaviorLog.findMany({
-    where: {
-      childId,
-      logDate: { gte: start, lte: end },
-      behavior: {
-        in: [...SUCCESS_BEHAVIORS, ...ATTEMPT_BEHAVIORS],
-      },
-    },
-  });
+//   const entries = await prisma.behaviorLog.findMany({
+//     where: {
+//       childId,
+//       logDate: { gte: start, lte: end },
+//       behavior: {
+//         in: [...SUCCESS_BEHAVIORS, ...ATTEMPT_BEHAVIORS],
+//       },
+//     },
+//   });
 
-  const successes = entries.filter((e) =>
-    SUCCESS_BEHAVIORS.includes(e.behavior),
-  ).length;
-  const attempts = entries.filter((e) =>
-    ATTEMPT_BEHAVIORS.includes(e.behavior),
-  ).length;
-  const totalAttempts = successes + attempts;
+//   const successes = entries.filter((e) =>
+//     SUCCESS_BEHAVIORS.includes(e.behavior),
+//   ).length;
+//   const attempts = entries.filter((e) =>
+//     ATTEMPT_BEHAVIORS.includes(e.behavior),
+//   ).length;
+//   const totalAttempts = successes + attempts;
 
-  const percentage = `${totalAttempts > 0 ? Math.round((successes / totalAttempts) * 100) : 0}%`;
+//   const percentage = `${totalAttempts > 0 ? Math.round((successes / totalAttempts) * 100) : 0}%`;
 
-  return {
-    percentage,
-    successes,
-    attempts: totalAttempts,
-  };
-};
+//   return {
+//     percentage,
+//     successes,
+//     attempts: totalAttempts,
+//   };
+// };
 
-const getNewFoodsThisWeek = async (childId: string, start: Date, end: Date) => {
-  const entries = await prisma.behaviorLog.findMany({
-    where: {
-      childId,
-      logDate: { gte: start, lte: end },
-      behavior: { startsWith: "Tried " },
-    },
-  });
+// const getNewFoodsThisWeek = async (childId: string, start: Date, end: Date) => {
+//   const entries = await prisma.behaviorLog.findMany({
+//     where: {
+//       childId,
+//       logDate: { gte: start, lte: end },
+//       behavior: { startsWith: "Tried " },
+//     },
+//   });
 
-  const foods = new Set<string>();
-  entries.forEach((e) => {
-    const food = e.behavior.replace("Tried ", "").trim();
-    if (food) foods.add(food);
-  });
+//   const foods = new Set<string>();
+//   entries.forEach((e) => {
+//     const food = e.behavior.replace("Tried ", "").trim();
+//     if (food) foods.add(food);
+//   });
 
-  const foodList = entries.map((e) => ({
-    food: e.behavior.replace("Tried ", "").trim(),
-    // Use UTC weekday to avoid server timezone affecting the day label
-    day: e.logDate.toLocaleDateString("en-US", {
-      weekday: "long",
-      timeZone: "UTC",
-    }),
-  }));
+//   const foodList = entries.map((e) => ({
+//     food: e.behavior.replace("Tried ", "").trim(),
+//     // Use UTC weekday to avoid server timezone affecting the day label
+//     day: e.logDate.toLocaleDateString("en-US", {
+//       weekday: "long",
+//       timeZone: "UTC",
+//     }),
+//   }));
 
-  return {
-    count: foods.size,
-    foods: Array.from(foods),
-    list: foodList,
-  };
-};
-const getPositiveMoments = async (childId: string, start: Date, end: Date) => {
-  const positiveBehaviors = [
-    "Comfortable during care",
-    "Cooperated with routine",
-    "Indicated need for change",
-  ];
+//   return {
+//     count: foods.size,
+//     foods: Array.from(foods),
+//     list: foodList,
+//   };
+// };
 
-  const entries = await prisma.behaviorLog.findMany({
-    where: {
-      childId,
-      logDate: { gte: start, lte: end },
-      behavior: { in: positiveBehaviors },
-    },
-  });
+// const getPositiveMoments = async (childId: string, start: Date, end: Date) => {
+//   const positiveBehaviors = [
+//     "Comfortable during care",
+//     "Cooperated with routine",
+//     "Indicated need for change",
+//   ];
 
-  const counts: Record<string, number> = {};
-  entries.forEach((e) => {
-    counts[e.behavior] = (counts[e.behavior] || 0) + 1;
-  });
+//   const entries = await prisma.behaviorLog.findMany({
+//     where: {
+//       childId,
+//       logDate: { gte: start, lte: end },
+//       behavior: { in: positiveBehaviors },
+//     },
+//   });
 
-  const totalPositive = entries.length;
+//   const counts: Record<string, number> = {};
+//   entries.forEach((e) => {
+//     counts[e.behavior] = (counts[e.behavior] || 0) + 1;
+//   });
 
-  return {
-    total: totalPositive,
-    breakdown: counts,
-  };
-};
+//   const totalPositive = entries.length;
 
-const getCalmStack = async (childId: string, start: Date, end: Date) => {
-  const count = await prisma.behaviorLog.count({
-    where: {
-      childId,
-      logDate: {
-        gte: start,
-        lte: end,
-      },
-      behavior: {
-        startsWith: "Calm ",
-      },
-    },
-  });
+//   return {
+//     total: totalPositive,
+//     breakdown: counts,
+//   };
+// };
 
-  return {
-    totalCalm: count,
-  };
-};
+// const getCalmStack = async (childId: string, start: Date, end: Date) => {
+//   const count = await prisma.behaviorLog.count({
+//     where: {
+//       childId,
+//       logDate: {
+//         gte: start,
+//         lte: end,
+//       },
+//       behavior: {
+//         startsWith: "Calm ",
+//       },
+//     },
+//   });
+
+//   return {
+//     totalCalm: count,
+//   };
+// };
 
 export const analyticsService = {
   getAnalyticsByPeriod,
