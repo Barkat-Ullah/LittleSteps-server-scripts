@@ -50,9 +50,8 @@ const auth = (...roles: string[]): RequestHandler => {
         throw new ApiError(403, "Your account has been suspended");
 
       if (verifiedUser.sessionId) {
-        const isSessionCached = await redis.get(
-          `session:${verifiedUser.sessionId}`,
-        );
+        const sessionKey = `session:${verifiedUser.sessionId}`;
+        const isSessionCached = await redis.get(sessionKey);
 
         if (!isSessionCached) {
           const session = await prisma.userSession.findUnique({
@@ -62,14 +61,21 @@ const auth = (...roles: string[]): RequestHandler => {
           if (!session || session.revokedAt !== null) {
             throw new ApiError(401, "Session expired, please login again");
           }
-          await redis.setex(
-            `session:${verifiedUser.sessionId}`,
-            TTL.SHORT,
-            "valid",
-          );
+
+          await redis.setex(sessionKey, TTL.SESSION, "valid");
+        } else {
+          const remainingTTL = await redis.ttl(sessionKey);
+          if (remainingTTL > 0 && remainingTTL < TTL.SESSION / 2) {
+            await redis
+              .expire(sessionKey, TTL.SESSION)
+              .catch((err) =>
+                console.error(
+                  `Failed to extend session expiry: ${err.message}`,
+                ),
+              );
+          }
         }
       }
-
       if (roles.length && !roles.includes(user.role)) {
         throw new ApiError(403, "Forbidden");
       }

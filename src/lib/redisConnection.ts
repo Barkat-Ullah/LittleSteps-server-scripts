@@ -40,8 +40,6 @@ export const bullMQRedisOptions: RedisOptions = {
   enableReadyCheck: false,
 };
 
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Client Instance
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,11 +68,12 @@ redis.on("end", () =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TTL = {
-  SHORT: 60 * 5, //  5 minutes — paginated / filtered list
+  SHORT: 60 * 10, //  10 minutes — paginated / filtered list
   MEDIUM: 60 * 30, // 30 minutes — single record by ID
   LONG: 60 * 60 * 6, //  6 hours — rarely-changing data
   DAY: 60 * 60 * 24, // 24 hours — static / config data
   TOKEN: 60 * 60 * 24, // 24 hours — JWT blacklist
+  SESSION: 60 * 60,
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -147,7 +146,6 @@ export async function cacheOr<T>(
   ttl: number,
   fetcher: () => Promise<T>,
 ): Promise<T | null> {
-  
   // Try retrieving data from cache and safely bypass on failure
   try {
     const cached = await redis.get(key);
@@ -186,9 +184,16 @@ export async function cacheOr<T>(
       if (fresh === undefined || fresh === null) {
         const negativeTTL = 60 * 2;
         redis
-          .set(key, JSON.stringify({ __isNegativeCache: true }), "EX", negativeTTL)
+          .set(
+            key,
+            JSON.stringify({ __isNegativeCache: true }),
+            "EX",
+            negativeTTL,
+          )
           .catch((err) =>
-            console.error(`Redis Negative SET failed for "${key}": ${err.message}`),
+            console.error(
+              `Redis Negative SET failed for "${key}": ${err.message}`,
+            ),
           );
         return;
       }
@@ -449,24 +454,24 @@ function stableHash(obj: Record<string, unknown>): string {
   const sorted = Object.keys(obj)
     .sort()
     .reduce<Record<string, unknown>>((acc, k) => {
-      const v = obj[k];
+      let v = obj[k];
+      
+      if (typeof v === "string" && v !== "" && !isNaN(Number(v))) {
+        v = Number(v);
+      }
+
       if (v !== undefined && v !== null && v !== "") {
         acc[k] = v;
       }
       return acc;
     }, {});
 
-  // djb2 variant hash algorithm
-  // simple, fast, collision-resistant enough for cache keys
   const str = JSON.stringify(sorted);
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
-    hash |= 0; // force to 32-bit integer
+    hash |= 0;
   }
-
-  // unsigned 32-bit → base-36 string (0-9 + a-z, small and readable)
   return (hash >>> 0).toString(36);
 }
-
 export default redis;

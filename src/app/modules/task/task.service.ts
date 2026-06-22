@@ -1,19 +1,19 @@
-import httpStatus from 'http-status';
-import { Prisma } from '@prisma/client';
-import { Request } from 'express';
-import { taskSelect } from './task.select';
-import { buildFilterConditions } from './task.utils';
-import { handleFileUploads } from '../../../utils/handleFile';
-import prisma from '../../../shared/prisma';
-import { IPaginationOptions } from '../../../interfaces/pagination';
-import { paginationHelper } from '../../../shared/pagination';
-import ApiError from '../../../error/ApiErrors';
+import httpStatus from "http-status";
+import { Prisma } from "@prisma/client";
+import { Request } from "express";
+import { taskSelect } from "./task.select";
+import { buildFilterConditions } from "./task.utils";
+import { handleFileUploads } from "../../../utils/handleFile";
+import prisma from "../../../shared/prisma";
+import { IPaginationOptions } from "../../../interfaces/pagination";
+import { paginationHelper } from "../../../shared/pagination";
+import ApiError from "../../../error/ApiErrors";
 import {
   CacheInvalidator,
   CacheKeys,
   TTL,
   cacheOr,
-} from '../../../lib/redisConnection';
+} from "../../../lib/redisConnection";
 
 // -------------------------------------------------------
 // create Task
@@ -45,7 +45,7 @@ type ITaskFilterRequest = {
   status?: string;
 };
 
-const taskSearchAbleFields = ['title', 'description'];
+const taskSearchAbleFields = ["title", "description"];
 
 const getTaskList = async (
   req: Request,
@@ -67,13 +67,13 @@ const getTaskList = async (
 
     if (searchTerm) {
       andConditions.push({
-        OR: taskSearchAbleFields.map(field => ({
-          [field]: { contains: searchTerm, mode: 'insensitive' },
+        OR: taskSearchAbleFields.map((field) => ({
+          [field]: { contains: searchTerm, mode: "insensitive" },
         })),
       });
     }
 
-     if (Object.keys(filterData).length) {
+    if (Object.keys(filterData).length) {
       andConditions.push(...buildFilterConditions(filterData));
     }
 
@@ -81,11 +81,11 @@ const getTaskList = async (
       andConditions.length > 0 ? { AND: andConditions } : {};
 
     const [result, total] = await Promise.all([
-        prisma.task.findMany({
+      prisma.task.findMany({
         skip,
         take: limit,
         where: whereConditions,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         select: taskSelect,
       }),
       prisma.task.count({ where: whereConditions }),
@@ -106,7 +106,7 @@ const getTaskById = async (req: Request) => {
       select: taskSelect,
     });
     if (!result) {
-      throw new ApiError(httpStatus.NOT_FOUND, 'Task not found');
+      throw new ApiError(httpStatus.NOT_FOUND, "Task not found");
     }
     return result;
   });
@@ -128,13 +128,13 @@ const getMyTask = async (
 
   if (searchTerm) {
     andConditions.push({
-      OR: taskSearchAbleFields.map(field => ({
-        [field]: { contains: searchTerm, mode: 'insensitive' },
+      OR: taskSearchAbleFields.map((field) => ({
+        [field]: { contains: searchTerm, mode: "insensitive" },
       })),
     });
   }
 
-   if (Object.keys(filterData).length) {
+  if (Object.keys(filterData).length) {
     andConditions.push(...buildFilterConditions(filterData));
   }
 
@@ -153,7 +153,7 @@ const getMyTask = async (
         skip,
         take: limit,
         where: whereConditions,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         select: taskSelect,
       }),
       prisma.task.count({ where: whereConditions }),
@@ -177,7 +177,7 @@ const updateTask = async (req: Request) => {
 
   const existingTask = await prisma.task.findUnique({ where: { id } });
   if (!existingTask) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Task not found');
+    throw new ApiError(httpStatus.NOT_FOUND, "Task not found");
   }
 
   const result = await prisma.task.update({
@@ -204,7 +204,7 @@ const toggleStatusTask = async (req: Request) => {
   const { id } = req.params;
   const existingTask = await prisma.task.findUnique({ where: { id } });
   if (!existingTask) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Task not found');
+    throw new ApiError(httpStatus.NOT_FOUND, "Task not found");
   }
 
   // TODO: define your status enum toggle logic below
@@ -230,9 +230,14 @@ const toggleStatusTask = async (req: Request) => {
 // -------------------------------------------------------
 const softDeleteTask = async (req: Request) => {
   const { id } = req.params;
-  const existingTask = await prisma.task.findUnique({ where: { id , isDeleted: false} });
+  const existingTask = await prisma.task.findUnique({
+    where: { id, isDeleted: false },
+  });
   if (!existingTask) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Task not found or Task is already deleted');
+    throw new ApiError(
+      httpStatus.NOT_FOUND,
+      "Task not found or Task is already deleted",
+    );
   }
 
   const result = await prisma.task.update({
@@ -255,7 +260,7 @@ const deleteTask = async (req: Request) => {
   const { id } = req.params;
   const existingTask = await prisma.task.findUnique({ where: { id } });
   if (!existingTask) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Task not found');
+    throw new ApiError(httpStatus.NOT_FOUND, "Task not found");
   }
   const result = await prisma.task.delete({ where: { id } });
   await CacheInvalidator.onRecordDelete(

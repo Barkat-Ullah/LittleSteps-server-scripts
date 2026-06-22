@@ -1,9 +1,16 @@
 import app from "./app";
 import { config } from "./config";
-
+import { initializeQueueSystem } from "./helpers/queue-manager/queueManager";
 
 function main() {
   try {
+    if (process.env.IS_WORKER === "true") {
+      console.log("🚀 [Worker Mode] Starting Background Job Worker Process...");
+      initializeQueueSystem();
+      return;
+    }
+
+    console.log("🌐 [API Mode] Preparing Express Server...");
     const desiredPort = Number(config.port || 5000);
 
     const tryListen = (port: number) => {

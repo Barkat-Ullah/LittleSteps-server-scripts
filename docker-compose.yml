@@ -13,9 +13,10 @@ services:
     env_file:
       - .env
     environment:
-      NODE_ENV: production        
-      REDIS_HOST: redis            
+      NODE_ENV: production
+      REDIS_HOST: redis
       REDIS_PORT: 6379
+      IS_WORKER: "false"
     depends_on:
       mongo:
         condition: service_healthy
@@ -23,7 +24,30 @@ services:
         condition: service_healthy
     networks:
       - littlesteps-network
+  # ─────────────────────────────────────────
+  # Node.js Worker
+  # ─────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: littlesteps-worker
+    restart: unless-stopped
 
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      IS_WORKER: "true"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - littlesteps-network
   # ─────────────────────────────────────────
   # MongoDB
   # ─────────────────────────────────────────
@@ -68,7 +92,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi",
+          'if [ -n "$$REDIS_PASSWORD" ]; then redis-cli -a "$$REDIS_PASSWORD" ping; else redis-cli ping; fi',
         ]
       interval: 10s
       timeout: 5s

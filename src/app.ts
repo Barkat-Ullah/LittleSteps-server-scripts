@@ -161,7 +161,9 @@ app.use("/api/v1", (req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-initializeQueueSystem();
+// worker
+
+// initializeQueueSystem();
 setupGracefulShutdown();
 
 // Warm up Prisma connection to avoid first-request latency spikes.

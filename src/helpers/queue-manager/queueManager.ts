@@ -1,12 +1,15 @@
-// queueManager.js
-
 import { redis } from "../../lib/redisConnection";
 import { cleanQueue } from "../cleanQueue/cleanOtpQueue";
-import { mailQueue, otpQueue } from "../queue";
+import { mailQueue, otpQueue } from "../queue"; 
 import { emailWorker } from "../worker/emailWorker";
 import { otpWorker } from "../worker/otpWorker";
 
+let cleanerInterval: NodeJS.Timeout | null = null;
+
 export const initializeQueueSystem = () => {
+
+  if (cleanerInterval) clearInterval(cleanerInterval);
+
   (async function startOtpCleaner() {
     try {
       await cleanQueue(otpQueue);
@@ -16,7 +19,7 @@ export const initializeQueueSystem = () => {
     }
 
     const HOUR = 60 * 60 * 1000;
-    setInterval(async () => {
+    cleanerInterval = setInterval(async () => {
       try {
         await cleanQueue(otpQueue);
         console.log("✅ queue cleaned (scheduled)");
@@ -32,7 +35,6 @@ export const initializeQueueSystem = () => {
   };
 };
 
-// Function to check status of all queues
 export const getQueueStatus = async () => {
   try {
     const [otpStats, mailStats] = await Promise.all([
@@ -51,24 +53,32 @@ export const getQueueStatus = async () => {
   }
 };
 
-// Graceful shutdown handling
+
 export const setupGracefulShutdown = () => {
   const shutdown = async (signal: any) => {
     console.log(`🚨 Received ${signal}. Shutting down gracefully...`);
 
-    // Stop accepting new jobs
-    await otpQueue.close();
-    await mailQueue.close();
-    // await notificationQueue.close();
+    if (cleanerInterval) clearInterval(cleanerInterval);
 
-    // Close Redis connection
-    await redis.quit();
+    try {
 
-    console.log("✅ All queues and connections closed gracefully");
-    process.exit(0);
+      await Promise.all([
+        otpQueue.close(),
+        mailQueue.close(),
+        // notificationQueue.close(),
+      ]);
+      console.log("✅ All queues closed successfully.");
+      
+      await redis.quit();
+      console.log("✅ Redis connection closed gracefully.");
+      
+    } catch (err: any) {
+      console.error(`❌ Error during graceful shutdown: ${err.message}`);
+    } finally {
+      process.exit(0);
+    }
   };
 
-  // Shutdown signal handling
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 };
