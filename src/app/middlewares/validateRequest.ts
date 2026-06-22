@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import type { ZodTypeAny } from "zod";
+import { ZodTypeAny } from "zod"; 
 
 const validateRequest = (schema: ZodTypeAny) => {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -10,10 +10,9 @@ const validateRequest = (schema: ZodTypeAny) => {
         try {
           currentBody = JSON.parse(currentBody.data);
         } catch (err) {
-          // JSON
+   
         }
       }
-
       const validatedBody = await schema.parseAsync(currentBody);
       req.body = validatedBody;
 

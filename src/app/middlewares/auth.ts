@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import type { Secret } from "jsonwebtoken";
 import ApiError from "../../error/ApiErrors";
 import { jwtHelpers } from "../../helpers/jwtHelpers";
+import { getEffectiveAccessId } from "../../helpers/careGiverAccessor";
 import prisma from "../../shared/prisma";
 import { config } from "../../config";
 import redis, {
@@ -38,6 +39,7 @@ const auth = (...roles: string[]): RequestHandler => {
             role: true,
             status: true,
             isDeleted: true,
+            createdById: true,
           },
         }),
       );
@@ -48,7 +50,6 @@ const auth = (...roles: string[]): RequestHandler => {
         throw new ApiError(403, "Your account has been suspended");
 
       if (verifiedUser.sessionId) {
-  
         const isSessionCached = await redis.get(
           `session:${verifiedUser.sessionId}`,
         );
@@ -73,6 +74,9 @@ const auth = (...roles: string[]): RequestHandler => {
         throw new ApiError(403, "Forbidden");
       }
 
+      // Compute the effective access ID once (cached via cacheOr above)
+      // For CAREGIVERs this resolves to their creator's ID; for others it's their own ID.
+      (req as any).accessId = getEffectiveAccessId(user);
       (req as any).user = user;
       next();
     } catch (err) {

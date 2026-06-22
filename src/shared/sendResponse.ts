@@ -8,6 +8,7 @@ interface SendResponseOptions<T> {
     page: number;
     limit: number;
     total: number;
+    nextCursor?: string | null;
   };
   data?: T | null | undefined;
 }

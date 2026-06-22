@@ -1,6 +1,5 @@
 import { Request } from "express";
 import httpStatus from "http-status";
-import { getEffectiveAccessId } from "../../../helpers/careGiverAccessor";
 import prisma from "../../../shared/prisma";
 import ApiError from "../../../error/ApiErrors";
 import {
@@ -16,10 +15,9 @@ const createMultipleEntries = async (
     childId: string;
     selectedBehaviors: { behavior: string; date: string }[];
   },
-  userId: string,
+  accessId: string,
 ) => {
   const { childId, selectedBehaviors } = payload;
-  const accessId = await getEffectiveAccessId(userId);
 
   const child = await prisma.children.findFirst({
     where: { id: childId, creatorId: accessId, isDeleted: false },
@@ -77,7 +75,7 @@ const getBehaviorLogByChild = async (req: Request) => {
     );
   }
 
-  const accessId = await getEffectiveAccessId(userId);
+  const accessId = (req as any).accessId;
 
   const child = await prisma.children.findFirst({
     where: { id: childId, creatorId: accessId, isDeleted: false },

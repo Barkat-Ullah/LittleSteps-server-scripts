@@ -38,60 +38,40 @@ const verifyEmailOtpSchema = z.object({
   params: z.record(z.string(), z.string()),
 });
 
-const loginSchema = z.object({
-  body: z
-    .object({
-      email: emailSchema,
-      password: passwordSchema,
-      deviceId: z.string().min(1).optional(),
-      deviceType: z.string().min(1).optional(),
-      userAgent: z.string().min(1).optional(),
-      ipAddress: z.string().min(1).optional(),
-    })
-    .strict(),
-  query: commonQuerySchema,
-  params: z.record(z.string(), z.string()),
-});
+const loginSchema = z
+  .object({
+    email: emailSchema,
+    password: passwordSchema,
+    deviceId: z.string().min(1).optional(),
+    deviceType: z.string().min(1).optional(),
+    userAgent: z.string().min(1).optional(),
+    ipAddress: z.string().min(1).optional(),
+  })
+  .strict();
 
-const forgotPasswordSchema = z.object({
-  body: z
-    .object({
-      email: emailSchema,
-    })
-    .strict(),
-  query: commonQuerySchema,
-  params: z.record(z.string(), z.string()),
-});
+const forgotPasswordSchema = z
+  .object({
+    email: emailSchema,
+  })
+  .strict();
 
-const resetPasswordSchema = z.object({
-  body: z
-    .object({
-      email: emailSchema,
-      otp: otpSchema,
-      newPassword: passwordSchema,
-    })
-    .strict(),
-  query: commonQuerySchema,
-  params: z.record(z.string(), z.string()),
-});
+const resetPasswordSchema = z
+  .object({
+    email: emailSchema,
+    otp: otpSchema,
+    newPassword: passwordSchema,
+  })
+  .strict();
 
-const changePasswordSchema = z.object({
-  body: z
-    .object({
-      currentPassword: passwordSchema,
-      newPassword: passwordSchema,
-    })
-    .strict(),
-  query: commonQuerySchema,
-  params: z.record(z.string(), z.string()),
-});
+const changePasswordSchema = z
+  .object({
+    currentPassword: passwordSchema,
+    newPassword: passwordSchema,
+  })
+  .strict();
 
 const resendOtpSchema = z.object({
-  body: z
-    .object({ email: emailSchema })
-    .strict(),
-  query: commonQuerySchema,
-  params: z.record(z.string(), z.string()),
+  email: emailSchema,
 });
 
 export const authValidation = {

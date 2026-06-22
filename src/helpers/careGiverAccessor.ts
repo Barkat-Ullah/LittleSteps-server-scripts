@@ -1,33 +1,22 @@
 import { userRole } from "@prisma/client";
 import ApiError from "../error/ApiErrors";
-import prisma from "../shared/prisma";
 import httpStatus from "http-status";
 
-export async function getEffectiveAccessId(userId: string): Promise<string> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      role: true,
-      createdBy: {
-        select: { id: true },
-      },
-    },
-  });
-
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
-  }
-
+export function getEffectiveAccessId(user: {
+  id: string;
+  role: string;
+  createdById?: string | null;
+}): string {
   if (user.role !== userRole.CAREGIVER) {
-    return userId;
+    return user.id;
   }
 
-  if (!user.createdBy?.id) {
+  if (!user.createdById) {
     throw new ApiError(
       httpStatus.FORBIDDEN,
-      'Caregiver has no associated parent/creator → no access to children',
+      "Caregiver has no associated parent/creator → no access to children",
     );
   }
 
-  return user.createdBy.id;
+  return user.createdById;
 }

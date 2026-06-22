@@ -9,6 +9,7 @@ model BehaviorLog {
     child     Children @relation(fields: [childId], references: [id])
 
     @@index([childId, logDate])
+    @@index([childId, behavior])
     @@map("behaviorLog")
 }
 
@@ -24,5 +25,7 @@ model Lognote {
     //relation
     child       Children @relation(fields: [childId], references: [id], onDelete: Cascade)
 
+    @@index([childId])
+    @@index([childId, createdAt])
     @@map("lognote")
 }

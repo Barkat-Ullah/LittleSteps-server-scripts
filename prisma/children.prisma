@@ -26,6 +26,9 @@ model Children {
     behaviorLogs           BehaviorLog[]
     lognotes               Lognote[]
 
+    @@index([creatorId, isDeleted])
+    @@index([isDeleted])
+    @@index([creatorId, isDeleted, fullName])
     @@map("children")
 }
 

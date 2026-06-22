@@ -19,7 +19,7 @@ const getAnalyticsByPeriodData = catchAsync(
 
     const result = await analyticsService.getAnalyticsByPeriod(
       childId,
-      req.user!.id,
+      (req as any).accessId,
       (period as AnalyticsPeriod) ?? "week",
       date,
     );

@@ -1,4 +1,3 @@
-import { getEffectiveAccessId } from "../../../helpers/careGiverAccessor";
 import prisma from "../../../shared/prisma";
 import { cacheOr, CacheKeys, TTL } from "../../../lib/redisConnection";
 
@@ -6,12 +5,10 @@ export type AnalyticsPeriod = "week" | "month";
 
 const getAnalyticsByPeriod = async (
   childId: string,
-  userId: string,
+  accessId: string,
   period: AnalyticsPeriod = "week",
   referenceDate: string, // client sends "YYYY-MM-DD" in their local timezone
 ) => {
-  const accessId = await getEffectiveAccessId(userId);
-
   // Parse client date in UTC to avoid server timezone drift
   const [year, month, day] = referenceDate.split("-").map(Number);
 

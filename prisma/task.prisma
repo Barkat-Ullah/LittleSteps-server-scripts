@@ -18,6 +18,9 @@ model Task {
     user          User          @relation("TaskUser", fields: [userId], references: [id])
     favorite      favorite[]
 
+    @@index([userId, category, status])
+    @@index([userId])
+    @@index([status])
     @@map("tasks")
 }
 

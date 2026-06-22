@@ -37,6 +37,9 @@ model User {
     userCompletedActivities UserCompletedActivity[] @relation("CompleteActivity")
     contact                 Contact[]
 
+    @@index([role, isDeleted])
+    @@index([status])
+    @@index([stripeCustomerId])
     @@map("user")
 }
 
@@ -87,6 +90,8 @@ model userSession {
 
     @@index([userId])
     @@index([deviceId])
+    @@index([refreshToken])
+    @@index([revokedAt])
 }
 
 ///////////////////////////////
@@ -121,6 +126,7 @@ model PendingOtpSession {
     createdAt    DateTime @default(now())
 
     @@unique([identifier, purpose])
+    @@index([otpExpiresAt])
 }
 
 ///////////////////////////////

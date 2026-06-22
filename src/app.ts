@@ -22,13 +22,13 @@ import {
 const app = express();
 
 app.post(
-  "/api/v1/stripe/webhook",
+  "/api/v1/stripe/webhook-in-app",
   express.raw({ type: "application/json" }),
   stripeWebhookForInApp,
 );
 
 app.post(
-  "/api/v1/stripe/webhook",
+  "/api/v1/stripe/webhook-by-link",
   express.raw({ type: "application/json" }),
   stripeWebhookForLink,
 );

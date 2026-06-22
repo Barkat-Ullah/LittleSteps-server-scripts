@@ -13,6 +13,7 @@ model Notification {
     receiver    User        @relation("Receiver", fields: [receiverId], references: [id])
     sender      User?       @relation("Sender", fields: [senderId], references: [id])
 
+    @@index([receiverId, isRead, createdAt])
     @@map("notifications")
 }
 

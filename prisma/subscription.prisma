@@ -30,6 +30,7 @@ model UserSubscription {
     user           User         @relation("UserSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
 
     @@unique([userId, subscriptionId])
+    @@index([userId, endDate])
     @@map("user_subscription")
 }
 

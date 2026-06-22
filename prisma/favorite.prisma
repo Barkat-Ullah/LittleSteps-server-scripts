@@ -9,5 +9,8 @@ model favorite {
   task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user       User     @relation("UserCreator", fields: [userId], references: [id])
 
+  @@index([userId, taskId])
+  @@index([userId])
+  @@index([taskId])
   @@map("love_react")
 }

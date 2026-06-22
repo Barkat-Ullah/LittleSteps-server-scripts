@@ -12,6 +12,8 @@ model Contact {
     //relation
     user      User?         @relation(fields: [userId], references: [id])
 
+    @@index([userId])
+    @@index([status, isDeleted])
     @@map("contact")
 }
 

@@ -48,6 +48,9 @@ model ScheduleItem {
     @@index([status])
     @@index([userId, childIds])
     @@index([startDate, endDate])
+    @@index([providerId])
+    @@index([userId, isDeleted, startDate, endDate])
+    @@index([userId, isDeleted, status])
     @@map("schedule_items")
 }
 
@@ -63,6 +66,8 @@ model UserCompletedActivity {
     user           User          @relation("CompleteActivity", fields: [userId], references: [id])
     scheduleItem   ScheduleItem? @relation(fields: [scheduleItemId], references: [id])
 
+    @@index([userId, scheduleItemId])
+    @@index([scheduleItemId])
     @@map("userCompletedActivity")
 }
 

@@ -12,6 +12,8 @@ model ChildDocument {
     //relation
     child      Children @relation(fields: [childId], references: [id], onDelete: Cascade)
 
+    @@index([childId])
+    @@index([childId, uploadedAt])
     @@map("child_documents")
 }
 
@@ -32,6 +34,8 @@ model NoteProvider {
     child         Children       @relation(fields: [childId], references: [id], onDelete: Cascade)
     scheduleItems ScheduleItem[]
 
+    @@index([childId])
+    @@index([childId, status])
     @@map("note_providers")
 }
 
@@ -67,6 +71,8 @@ model HealthCareNote {
     //relation
     child       Children  @relation(fields: [childId], references: [id], onDelete: Cascade)
 
+    @@index([childId])
+    @@index([childId, createdAt])
     @@map("health_care_notes")
 }
 
@@ -94,6 +100,8 @@ model PreferenceSensoryNote {
     //relation
     child       Children             @relation(fields: [childId], references: [id], onDelete: Cascade)
 
+    @@index([childId])
+    @@index([childId, category])
     @@map("preference_sensory_notes")
 }
 

@@ -7,7 +7,6 @@ import sendResponse from "../../../shared/sendResponse";
 // create BehaviorLog
 const updateBehaviorLog = catchAsync(async (req: Request, res: Response) => {
   const { childId, selectedBehaviors } = req.body;
-  const userId = req.user!.id;
 
   // [{ behavior: string, date: string }]
 
@@ -16,7 +15,7 @@ const updateBehaviorLog = catchAsync(async (req: Request, res: Response) => {
       childId,
       selectedBehaviors,
     },
-    userId,
+    (req as any).accessId,
   );
 
   sendResponse(res, {

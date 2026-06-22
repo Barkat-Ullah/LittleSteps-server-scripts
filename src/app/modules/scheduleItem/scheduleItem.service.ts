@@ -23,7 +23,6 @@ import {
   toUTCEndOfDay,
   toUTCStartOfDay,
 } from "../../../utils/utcDate";
-import { getEffectiveAccessId } from "../../../helpers/careGiverAccessor";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -42,21 +41,24 @@ type IScheduleItemFilterRequest = {
 const scheduleItemSearchableFields = ["title", "description"];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers
+// Dedicated select for list views — avoids fetching unused relations
+// Only fetches what the list response actually needs.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Resolve accessId:
- *  - CAREGIVER → their creator's id
- *  - USER / ADMIN → their own id
- */
-async function resolveAccessId(userId: string): Promise<string> {
-  return getEffectiveAccessId(userId);
-}
+const scheduleItemListSelect = {
+  ...scheduleItemSelect,
+  children: {
+    where: { isDeleted: false },
+    select: { id: true, fullName: true, image: true },
+  },
+  userCompletedActivities: {
+    select: { isCompleted: true },
+    orderBy: { completedAt: "desc" as const },
+    take: 1,
+  },
+} satisfies Prisma.ScheduleItemSelect;
 
 /**
  * Build the shared date + day filter used in both list and monthly queries.
- * Mirrors the 3-layer filter from the original event service exactly.
  *
  * Layer 1 — date range: startDate <= filterDate <= endDate
  * Layer 2 — day name:   days[] contains filterDayName OR days[] is empty
@@ -85,7 +87,7 @@ const createScheduleItem = async (req: Request) => {
     | { [fieldname: string]: Express.Multer.File[] }
     | undefined;
 
-  const accessId = await resolveAccessId(userId);
+  const accessId = (req as any).accessId;
   const uploadedFiles = await handleFileUploads(files);
 
   // ── Provider validation  ──
@@ -143,16 +145,12 @@ const createScheduleItem = async (req: Request) => {
     finalChildIds = myChildren.map((c) => c.id);
   }
 
-  // ── Create — explicitly list every field, never blind spread ──
   const result = await prisma.scheduleItem.create({
     data: {
-      // ownership
       userId: accessId,
-      // relations
       childIds: finalChildIds,
       children: { connect: finalChildIds.map((id) => ({ id })) },
       providerId: data.providerId ?? null,
-      // shared
       itemType: data.itemType,
       title: data.title,
       description: data.description ?? null,
@@ -169,14 +167,12 @@ const createScheduleItem = async (req: Request) => {
       days: data.days ?? [],
       isAddedCalender: data.isAddedCalender ?? false,
       isForAllChild: data.isForAllChild ?? false,
-      // event-specific
       eventCategory: data.eventCategory ?? null,
       location: data.location ?? null,
       weeks: data.weeks ? Number(data.weeks) : null,
       reminderTime: data.reminderTime ? Number(data.reminderTime) : null,
       repeatType: data.repeatType ?? "None",
       repeatEndDate: data.repeatEndDate ? new Date(data.repeatEndDate) : null,
-      // activity-specific
       stage: data.stage ?? null,
       activityType: data.activityType ?? null,
       skill: data.skill ?? [],
@@ -191,6 +187,7 @@ const createScheduleItem = async (req: Request) => {
 
   return result;
 };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET LIST (admin / global)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -237,16 +234,17 @@ const getScheduleItemList = async (
         orderBy: { createdAt: "desc" },
         select: scheduleItemSelect,
       }),
+
       prisma.scheduleItem.count({ where }),
     ]);
-
     return { meta: { total, page, limit }, data: result };
   });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET BY DATE — unified event + activity list for a given date
-// Mirrors getEventListForAllChildOrSingleChildByDateIntoDb exactly
+// Uses dedicated list select to avoid over-fetching (user + provider
+// are not needed here since the list is already scoped to the current user).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getScheduleItemListByDate = async (
@@ -258,28 +256,14 @@ const getScheduleItemListByDate = async (
   const { page, limit, skip } = paginationHelper.calculatePagination(options);
   const { date, childId, searchTerm, status, itemType } = filters;
 
-  // ----------------------------------------------------------
-  // STEP 1: Resolve accessId
-  // ----------------------------------------------------------
-  const accessId = await resolveAccessId(userId);
+  const accessId = (req as any).accessId;
 
-  // ----------------------------------------------------------
-  // STEP 2: Resolve filter date (client-supplied ISO "YYYY-MM-DD")
-  // If not provided, fall back to today's UTC date string.
-  // Client should always send this to avoid timezone issues.
-  // ----------------------------------------------------------
   const filterDateStr: string = date ?? toUTCDateKey(new Date());
-  // const filterDayName = getDayNameFromDateStr(filterDateStr);
 
-  // ----------------------------------------------------------
-  // STEP 3: Build WHERE conditions
-  // ----------------------------------------------------------
   const andConditions: Prisma.ScheduleItemWhereInput[] = [
     { userId: accessId },
     { isDeleted: false },
-    // Layer 1 + 2: date range and day name filter
     buildDateAndDayFilter(filterDateStr),
-    // Must have at least one child or be for all children
     {
       OR: [
         { isForAllChild: true },
@@ -314,14 +298,12 @@ const getScheduleItemListByDate = async (
     }
   }
 
-  // Filter by itemType (Event | Activity) if provided
   if (itemType && Object.values(ItemType).includes(itemType as ItemType)) {
     andConditions.push({ itemType: itemType as ItemType });
   }
 
   const where: Prisma.ScheduleItemWhereInput = { AND: andConditions };
 
-  // Cache key scoped to user + date + filters
   const cacheKey = CacheKeys.myList("scheduleItem:byDate", accessId, {
     filterDateStr,
     childId,
@@ -333,49 +315,15 @@ const getScheduleItemListByDate = async (
   });
 
   return cacheOr(cacheKey, TTL.SHORT, async () => {
-    // ----------------------------------------------------------
-    // STEP 4: Fetch items
-    // ----------------------------------------------------------
+    // Fetch only what's needed for the list view — no user/provider relations
     const items = await prisma.scheduleItem.findMany({
       skip,
       take: limit,
       where,
       orderBy: { startDate: "asc" },
-      select: {
-        ...scheduleItemSelect,
-        children: {
-          where: { isDeleted: false },
-          select: { id: true, fullName: true, image: true },
-        },
-        user: {
-          select: {
-            id: true,
-            role: true,
-            userDetails: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                files: true,
-              },
-            },
-          },
-        },
-        userCompletedActivities: {
-          select: { isCompleted: true },
-          orderBy: { completedAt: "desc" },
-          take: 1,
-        },
-        provider: {
-          select: { id: true, fullName: true },
-        },
-      },
+      select: scheduleItemListSelect,
     });
 
-    // ----------------------------------------------------------
-    // STEP 5: Layer 3 — in-memory daysPWeek frequency filter
-    // (Same logic as existing event service; Prisma can't do this)
-    // ----------------------------------------------------------
     const filtered = items.filter((item) =>
       isWithinFrequencyLimit(
         {
@@ -388,14 +336,8 @@ const getScheduleItemListByDate = async (
       ),
     );
 
-    // ----------------------------------------------------------
-    // STEP 6: Count for pagination meta
-    // ----------------------------------------------------------
     const total = await prisma.scheduleItem.count({ where });
 
-    // ----------------------------------------------------------
-    // STEP 7: Count today's completed items (UTC today)
-    // ----------------------------------------------------------
     const todayStr = toUTCDateKey(new Date());
     const completedToday = await prisma.scheduleItem.count({
       where: {
@@ -411,15 +353,10 @@ const getScheduleItemListByDate = async (
       },
     });
 
-    // ----------------------------------------------------------
-    // STEP 8: Shape the unified response
-    // ----------------------------------------------------------
     const data = filtered.map((item) => ({
       ...item,
-      // Flatten completion status from the relation
       isCompleted: item.userCompletedActivities?.[0]?.isCompleted ?? false,
       userCompletedActivities: undefined,
-      // Expose child as single (first) or array depending on consumer preference
       child: (item.children as any)?.[0] ?? null,
     }));
 
@@ -432,16 +369,13 @@ const getScheduleItemListByDate = async (
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET MONTHLY — dot indicators for calendar view
-// Mirrors getCurrentMonthEvent exactly
+// Optimized: iterates each item's actual date range instead of full 31 days.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getMonthlyScheduleItems = async (req: Request) => {
   const userId = req.user!.id;
   const { month } = req.query; // "YYYY-MM"
 
-  // ----------------------------------------------------------
-  // STEP 1: Validate month format
-  // ----------------------------------------------------------
   if (!month || typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
@@ -457,15 +391,8 @@ const getMonthlyScheduleItems = async (req: Request) => {
     throw new ApiError(httpStatus.BAD_REQUEST, "Invalid year or month value.");
   }
 
-  // ----------------------------------------------------------
-  // STEP 2: Resolve accessId
-  // ----------------------------------------------------------
-  const accessId = await resolveAccessId(userId);
+  const accessId = (req as any).accessId;
 
-  // ----------------------------------------------------------
-  // STEP 3: Build UTC month boundaries from the "YYYY-MM" string
-  // (never use server new Date() — derive from the param)
-  // ----------------------------------------------------------
   const monthStartStr = `${yearStr}-${monthStr.padStart(2, "0")}-01`;
   const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
   const monthEndStr = `${yearStr}-${monthStr.padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
@@ -478,9 +405,6 @@ const getMonthlyScheduleItems = async (req: Request) => {
   });
 
   return cacheOr(cacheKey, TTL.MEDIUM, async () => {
-    // ----------------------------------------------------------
-    // STEP 4: Fetch all items overlapping this month
-    // ----------------------------------------------------------
     const itemsThisMonth = await prisma.scheduleItem.findMany({
       where: {
         userId: accessId,
@@ -503,65 +427,91 @@ const getMonthlyScheduleItems = async (req: Request) => {
       orderBy: { startDate: "asc" },
     });
 
-    // ----------------------------------------------------------
-    // STEP 5: Generate all date strings in this month
-    // ----------------------------------------------------------
-    const allDatesInMonth: string[] = [];
-    const current = new Date(Date.UTC(year, monthIndex, 1));
+    // Pre-compute day names for each date string to avoid repeated parsing
+    const dayNameCache = new Map<string, string>();
 
-    while (current <= monthEnd) {
-      allDatesInMonth.push(toUTCDateKey(current));
-      current.setUTCDate(current.getUTCDate() + 1);
-    }
-
-    // ----------------------------------------------------------
-    // STEP 6: Per-date 3-layer filter (same as event service)
-    // ----------------------------------------------------------
     const itemsByDate = new Map<
       string,
       { categories: string[]; types: string[] }
     >();
 
-    for (const dateStr of allDatesInMonth) {
-      const dayName = getDayNameFromDateStr(dateStr);
-      const categories: string[] = [];
-      const types: string[] = [];
+    // Optimized: for each item, iterate only its date range within the month
+    for (const item of itemsThisMonth) {
+      if (!item.startDate || !item.endDate) continue;
 
-      for (const item of itemsThisMonth) {
-        if (!item.startDate || !item.endDate) continue;
+      const itemStartKey = toUTCDateKey(item.startDate);
+      const itemEndKey = toUTCDateKey(item.endDate);
 
-        // Layer 1: date within item range
-        const itemStartKey = toUTCDateKey(item.startDate);
-        const itemEndKey = toUTCDateKey(item.endDate);
-        if (dateStr < itemStartKey || dateStr > itemEndKey) continue;
+      // Clamp to month boundaries
+      const rangeStart =
+        itemStartKey > monthStartStr ? itemStartKey : monthStartStr;
+      const rangeEnd = itemEndKey < monthEndStr ? itemEndKey : monthEndStr;
 
-        // Layer 2: day name matches
-        if (item.days.length > 0 && !item.days.includes(dayName)) continue;
+      if (rangeStart > rangeEnd) continue;
 
-        // Layer 3: daysPWeek frequency
-        const withinLimit = isWithinFrequencyLimit(
-          {
-            days: item.days,
-            daysPWeek: item.daysPWeek,
-            startDate: item.startDate,
-            endDate: item.endDate,
-          },
-          dateStr,
-        );
-        if (!withinLimit) continue;
+      // Convert start/end to Date objects for iteration
+      const [sY, sM, sD] = rangeStart.split("-").map(Number);
+      const [eY, eM, eD] = rangeEnd.split("-").map(Number);
 
-        if (item.eventCategory) categories.push(item.eventCategory);
-        types.push(item.itemType);
-      }
+      const iterDate = new Date(Date.UTC(sY, sM - 1, sD));
+      const endDateObj = new Date(Date.UTC(eY, eM - 1, eD));
 
-      if (categories.length > 0 || types.length > 0) {
-        itemsByDate.set(dateStr, { categories, types });
+      while (iterDate <= endDateObj) {
+        const dateStr = toUTCDateKey(iterDate);
+
+        // Layer 2: day name check (cache to avoid repeated string ops)
+        if (item.days.length > 0) {
+          let dayName = dayNameCache.get(dateStr);
+          if (!dayName) {
+            dayName = getDayNameFromDateStr(dateStr);
+            dayNameCache.set(dateStr, dayName);
+          }
+          if (!item.days.includes(dayName)) {
+            iterDate.setUTCDate(iterDate.getUTCDate() + 1);
+            continue;
+          }
+        }
+
+        // Layer 3: frequency check
+        if (
+          !isWithinFrequencyLimit(
+            {
+              days: item.days,
+              daysPWeek: item.daysPWeek,
+              startDate: item.startDate,
+              endDate: item.endDate,
+            },
+            dateStr,
+          )
+        ) {
+          iterDate.setUTCDate(iterDate.getUTCDate() + 1);
+          continue;
+        }
+
+        const entry = itemsByDate.get(dateStr) ?? { categories: [], types: [] };
+        if (
+          item.eventCategory &&
+          !entry.categories.includes(item.eventCategory)
+        ) {
+          entry.categories.push(item.eventCategory);
+        }
+        if (!entry.types.includes(item.itemType)) {
+          entry.types.push(item.itemType);
+        }
+        itemsByDate.set(dateStr, entry);
+
+        iterDate.setUTCDate(iterDate.getUTCDate() + 1);
       }
     }
 
-    // ----------------------------------------------------------
-    // STEP 7: Build response array
-    // ----------------------------------------------------------
+    // Generate all date strings for the response
+    const allDatesInMonth: string[] = [];
+    const current = new Date(Date.UTC(year, monthIndex, 1));
+    while (current <= monthEnd) {
+      allDatesInMonth.push(toUTCDateKey(current));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
     const monthlyData = allDatesInMonth.map((dateStr) => {
       const entry = itemsByDate.get(dateStr);
       return {
@@ -581,7 +531,7 @@ const getMonthlyScheduleItems = async (req: Request) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET BY ID
+// GET BY ID — uses full select with all relations
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getScheduleItemById = async (req: Request) => {
@@ -628,7 +578,7 @@ const getScheduleItemById = async (req: Request) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET MY LIST (user-scoped, no date filter — for management screens)
+// GET MY LIST (user-scoped, no date filter)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getMyScheduleItem = async (
@@ -640,7 +590,7 @@ const getMyScheduleItem = async (
   const { page, limit, skip } = paginationHelper.calculatePagination(options);
   const { searchTerm, ...filterData } = filters;
 
-  const accessId = await resolveAccessId(userId);
+  const accessId = (req as any).accessId;
 
   const cacheKey = CacheKeys.myList("scheduleItem", accessId, {
     page,
@@ -696,7 +646,7 @@ const updateScheduleItem = async (req: Request) => {
     | { [fieldname: string]: Express.Multer.File[] }
     | undefined;
 
-  const accessId = await resolveAccessId(userId);
+  const accessId = (req as any).accessId;
   const uploadedFiles = await handleFileUploads(files);
 
   const existing = await prisma.scheduleItem.findUnique({
@@ -714,7 +664,6 @@ const updateScheduleItem = async (req: Request) => {
     );
   }
 
-  // Resolve updated childIds
   let childUpdateClause: { connect: { id: string }[] } | undefined;
 
   if (data.isForAllChild === true) {
@@ -756,7 +705,6 @@ const updateScheduleItem = async (req: Request) => {
     childUpdateClause = { connect: validIds.map((cid) => ({ id: cid })) };
   }
 
-  // Build update payload — only include fields present in the request body
   const updateData: Prisma.ScheduleItemUpdateInput = {
     ...(data.itemType !== undefined && { itemType: data.itemType }),
     ...(data.title !== undefined && { title: data.title }),
@@ -813,9 +761,7 @@ const updateScheduleItem = async (req: Request) => {
     select: scheduleItemSelect,
   });
 
-  // Invalidate: single record + all lists for this user
   await CacheInvalidator.onOwnedRecordUpdate("scheduleItem", id, accessId);
-  // Also bust date-based and monthly caches for this user
   await Promise.all([
     invalidatePattern(CacheKeys.myListPattern("scheduleItem:byDate", accessId)),
     invalidatePattern(
@@ -833,7 +779,7 @@ const updateScheduleItem = async (req: Request) => {
 const toggleStatusScheduleItem = async (req: Request) => {
   const { id } = req.params;
   const userId = req.user!.id;
-  const accessId = await resolveAccessId(userId);
+  const accessId = (req as any).accessId;
 
   const existing = await prisma.scheduleItem.findUnique({
     where: { id, isDeleted: false },
@@ -862,7 +808,6 @@ const toggleStatusScheduleItem = async (req: Request) => {
     select: scheduleItemSelect,
   });
 
-  // Invalidate single record + user's list caches
   await CacheInvalidator.onOwnedRecordUpdate("scheduleItem", id, accessId);
   await Promise.all([
     invalidatePattern(CacheKeys.myListPattern("scheduleItem:byDate", accessId)),
@@ -881,7 +826,7 @@ const toggleStatusScheduleItem = async (req: Request) => {
 const softDeleteScheduleItem = async (req: Request) => {
   const { id } = req.params;
   const userId = req.user!.id;
-  const accessId = await resolveAccessId(userId);
+  const accessId = (req as any).accessId;
 
   const existing = await prisma.scheduleItem.findUnique({
     where: { id, isDeleted: false },
@@ -926,7 +871,7 @@ const softDeleteScheduleItem = async (req: Request) => {
 const deleteScheduleItem = async (req: Request) => {
   const { id } = req.params;
   const userId = req.user!.id;
-  const accessId = await resolveAccessId(userId);
+  const accessId = (req as any).accessId;
 
   const existing = await prisma.scheduleItem.findUnique({
     where: { id },

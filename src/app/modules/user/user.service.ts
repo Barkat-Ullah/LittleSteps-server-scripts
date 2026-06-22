@@ -4,7 +4,13 @@ import { prisma } from "../../../shared/prisma";
 import ApiError from "../../../error/ApiErrors";
 import { IPaginationOptions } from "../../../interfaces/pagination";
 import { paginationHelper } from "../../../shared/pagination";
-import redis from "../../../lib/redisConnection";
+import {
+  cacheOr,
+  CacheKeys,
+  TTL,
+  CacheInvalidator,
+  invalidateKeys,
+} from "../../../lib/redisConnection";
 import { Request } from "express";
 import { handleFileUploads } from "../../../utils/handleFile";
 
@@ -24,103 +30,109 @@ const getAllUsersFromDB = async (
   const { page, limit, skip } = paginationHelper.calculatePagination(options);
   const { searchTerm } = filters;
 
-  const where: Prisma.UserWhereInput = {
-    role: userRole.USER,
-    isDeleted: false,
-  };
+  const cacheKey = CacheKeys.list("user", { page, limit, searchTerm, ...filters });
 
-  if (searchTerm) {
-    where.OR = [{ email: { contains: searchTerm, mode: "insensitive" } }];
-  }
+  return cacheOr(cacheKey, TTL.SHORT, async () => {
+    const where: Prisma.UserWhereInput = {
+      role: userRole.USER,
+      isDeleted: false,
+    };
 
-  if (filters.status) {
-    where.status = filters.status;
-  }
+    if (searchTerm) {
+      where.OR = [{ email: { contains: searchTerm, mode: "insensitive" } }];
+    }
 
-  const [users, total] = await Promise.all([
-    prisma.user.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: limit,
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          provider: true,
+          createdAt: true,
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return {
+      meta: { total, page, limit },
+      data: users,
+    };
+  });
+};
+
+const getUserDetailsFromDB = async (id: string) => {
+  // Use same key pattern as auth middleware and existing invalidation
+  return cacheOr(`user:${id}`, TTL.MEDIUM, async () => {
+    const user = await prisma.user.findUnique({
+      where: { id },
       select: {
         id: true,
         email: true,
         role: true,
         provider: true,
+        status: true,
+        isDeleted: true,
         createdAt: true,
-      },
-    }),
-    prisma.user.count({ where }),
-  ]);
-
-  return {
-    meta: {
-      total,
-      page,
-      limit,
-    },
-    data: users,
-  };
-};
-
-const getUserDetailsFromDB = async (id: string) => {
-  const user = await prisma.user.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      email: true,
-      role: true,
-      provider: true,
-      status: true,
-      isDeleted: true,
-      createdAt: true,
-      userDetails: {
-        select: {
-          firstName: true,
-          lastName: true,
-          address: true,
-          phone: true,
-          files: true,
+        userDetails: {
+          select: {
+            firstName: true,
+            lastName: true,
+            address: true,
+            phone: true,
+            files: true,
+          },
         },
       },
-    },
+    });
+
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+    }
+
+    return user;
   });
-
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  return user;
 };
 
 const getMyProfileFromDB = async (userId: string) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      role: true,
-      provider: true,
-      status: true,
-      createdAt: true,
-      userDetails: {
-        select: {
-          firstName: true,
-          lastName: true,
-          address: true,
-          phone: true,
-          files: true,
+  // Use same key pattern as auth middleware for consistency
+  return cacheOr(`user:${userId}`, TTL.MEDIUM, async () => {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        provider: true,
+        status: true,
+        createdAt: true,
+        userDetails: {
+          select: {
+            firstName: true,
+            lastName: true,
+            address: true,
+            phone: true,
+            files: true,
+          },
         },
       },
-    },
+    });
+
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+    }
+
+    return user;
   });
-
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  return user;
 };
 
 const updateMyProfileIntoDb = async (req: Request) => {
@@ -209,6 +221,10 @@ const updateMyProfileIntoDb = async (req: Request) => {
     },
   });
 
+  // Invalidate user cache after profile update
+  await invalidateKeys(`user:${userId}`);
+  await CacheInvalidator.onRelatedChange("user");
+
   return result;
 };
 
@@ -230,7 +246,7 @@ const updateUserRoleIntoDb = async (id: string, role: userRole) => {
           userDetails: { select: { firstName: true, lastName: true } },
         },
       }),
-      redis.del(`user:${id}`),
+      invalidateKeys(`user:${id}`),
     ]);
 
     return updatedUser;
@@ -263,7 +279,8 @@ const toggleUserStatus = async (id: string) => {
       where: { id },
       data: { status: newStatus },
     }),
-    redis.del(`user:${id}`),
+    invalidateKeys(`user:${id}`),
+    CacheInvalidator.onRelatedChange("user"),
     prisma.userSession.deleteMany({ where: { userId: id } }),
   ]);
 
@@ -289,7 +306,8 @@ const softDeleteUserById = async (id: string) => {
     }),
 
     // ✅ Cache delete
-    redis.del(`user:${id}`),
+    invalidateKeys(`user:${id}`),
+    CacheInvalidator.onRelatedChange("user"),
     prisma.userSession.deleteMany({ where: { userId: id } }),
   ]);
 
@@ -359,6 +377,10 @@ const updateUserIntoDb = async (payload: any, id: string) => {
     },
   });
 
+  // Invalidate user cache after admin update
+  await invalidateKeys(`user:${id}`);
+  await CacheInvalidator.onRelatedChange("user");
+
   return result;
 };
 
@@ -369,6 +391,11 @@ const deleteUserFromDB = async (id: string) => {
   }
 
   await prisma.user.delete({ where: { id } });
+
+  // Invalidate user cache after deletion
+  await invalidateKeys(`user:${id}`);
+  await CacheInvalidator.onRelatedChange("user");
+
   return { id };
 };
 
