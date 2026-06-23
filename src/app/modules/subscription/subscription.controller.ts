@@ -1,20 +1,31 @@
 import httpStatus from "http-status";
-import { subscriptionService } from "./subscription.service";
 import { Request, Response } from "express";
+import { subscriptionService } from "./subscription.service";
 import catchAsync from "../../../shared/catchAsync";
 import sendResponse from "../../../shared/sendResponse";
 import pick from "../../../shared/pick";
 
 // create Subscription
 const createSubscription = catchAsync(async (req: Request, res: Response) => {
-  const result = await subscriptionService.createSubscription(req);
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
     message: "Subscription created successfully",
-    data: result,
+    data: null,
   });
 });
+
+// get all UserSubscription
+const getUserSubscriptionList = catchAsync(
+  async (req: Request, res: Response) => {
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "UserSubscription list retrieved successfully",
+      data: [],
+    });
+  },
+);
 
 const buySubscriptionOnLink = catchAsync(
   async (req: Request, res: Response) => {
@@ -54,22 +65,6 @@ const getSubscriptionList = catchAsync(async (req: Request, res: Response) => {
     meta: result.meta,
   });
 });
-
-// get all UserSubscription
-const userSubscriptionFilterableFields = ["searchTerm", "id", "createdAt"];
-const getUserSubscriptionList = catchAsync(
-  async (req: Request, res: Response) => {
-    const options = pick(req.query, ["limit", "page", "sortBy", "sortOrder"]);
-    const filters = pick(req.query, userSubscriptionFilterableFields);
-    const result = await subscriptionService.getUserSubscriptionList(req);
-    sendResponse(res, {
-      statusCode: httpStatus.OK,
-      success: true,
-      message: "UserSubscription list retrieved successfully",
-      data: result,
-    });
-  },
-);
 
 const getMyPlan = catchAsync(async (req: Request, res: Response) => {
   const result = await subscriptionService.getMyPlan(req);

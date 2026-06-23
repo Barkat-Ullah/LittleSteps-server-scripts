@@ -19,6 +19,21 @@ type IUserFilterRequest = {
   status?: UserStatus;
 };
 
+// Interface for User Details updates to avoid 'any'
+interface IUserDetailsUpdate {
+  firstName?: string | null;
+  lastName?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  dob?: Date | null;
+  educationLevel?: string;
+  employmentStatus?: string;
+  parentingGoal?: string;
+  supportSystem?: string;
+  relation?: string;
+  files?: any;
+}
+
 const isUniqueConstraintError = (error: unknown) => {
   return Boolean((error as any)?.code === "P2002");
 };
@@ -27,10 +42,15 @@ const getAllUsersFromDB = async (
   options: IPaginationOptions,
   filters: IUserFilterRequest,
 ) => {
-  const { page, limit, skip } = paginationHelper.calculatePagination(options);
+  const { page, limit, cursor } = paginationHelper.calculatePagination(options);
   const { searchTerm } = filters;
 
-  const cacheKey = CacheKeys.list("user", { page, limit, searchTerm, ...filters });
+  const cacheKey = CacheKeys.list("user", {
+    page,
+    limit,
+    cursor,
+    ...filters,
+  });
 
   return cacheOr(cacheKey, TTL.SHORT, async () => {
     const where: Prisma.UserWhereInput = {
@@ -46,32 +66,41 @@ const getAllUsersFromDB = async (
       where.status = filters.status;
     }
 
+    const findManyArgs: Prisma.UserFindManyArgs = {
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        provider: true,
+        status: true,
+        createdAt: true,
+      },
+    };
+
+    if (cursor) {
+      findManyArgs.cursor = { id: cursor };
+      findManyArgs.skip = 1;
+    }
+
     const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          provider: true,
-          createdAt: true,
-        },
-      }),
+      prisma.user.findMany(findManyArgs),
       prisma.user.count({ where }),
     ]);
 
+    const lastItem = users[users.length - 1];
+    const nextCursor = users.length === limit ? (lastItem?.id ?? null) : null;
+
     return {
-      meta: { total, page, limit },
+      meta: { total, page, limit, nextCursor },
       data: users,
     };
   });
 };
 
 const getUserDetailsFromDB = async (id: string) => {
-  // Use same key pattern as auth middleware and existing invalidation
   return cacheOr(`user:${id}`, TTL.MEDIUM, async () => {
     const user = await prisma.user.findUnique({
       where: { id },
@@ -95,7 +124,7 @@ const getUserDetailsFromDB = async (id: string) => {
       },
     });
 
-    if (!user) {
+    if (!user || user.isDeleted) {
       throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
 
@@ -104,7 +133,6 @@ const getUserDetailsFromDB = async (id: string) => {
 };
 
 const getMyProfileFromDB = async (userId: string) => {
-  // Use same key pattern as auth middleware for consistency
   return cacheOr(`user:${userId}`, TTL.MEDIUM, async () => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -165,14 +193,12 @@ const updateMyProfileIntoDb = async (req: Request) => {
     relation,
   } = data;
 
-  const userData: Prisma.UserUpdateInput = {};
-  const userDetailsData: Record<string, any> = {};
+  const userDetailsData: IUserDetailsUpdate = {};
 
   if (firstName !== undefined) userDetailsData.firstName = firstName;
   if (lastName !== undefined) userDetailsData.lastName = lastName;
   if (address !== undefined) userDetailsData.address = address;
   if (phone !== undefined) userDetailsData.phone = phone;
-
   if (dob !== undefined) userDetailsData.dob = dob ? new Date(dob) : null;
   if (educationLevel !== undefined)
     userDetailsData.educationLevel = educationLevel;
@@ -191,12 +217,13 @@ const updateMyProfileIntoDb = async (req: Request) => {
   const result = await prisma.user.update({
     where: { id: userId },
     data: {
-      ...userData,
       userDetails: Object.keys(userDetailsData).length
         ? {
             upsert: {
-              create: userDetailsData as any,
-              update: userDetailsData,
+              create:
+                userDetailsData as Prisma.userDetailsCreateWithoutUserInput,
+              update:
+                userDetailsData as Prisma.userDetailsUpdateWithoutUserInput,
             },
           }
         : undefined,
@@ -221,9 +248,11 @@ const updateMyProfileIntoDb = async (req: Request) => {
     },
   });
 
-  // Invalidate user cache after profile update
-  await invalidateKeys(`user:${userId}`);
-  await CacheInvalidator.onRelatedChange("user");
+  // Clean-up caches synchronously to avoid race condition
+  await Promise.all([
+    invalidateKeys(`user:${userId}`),
+    CacheInvalidator.onRelatedChange("user"),
+  ]);
 
   return result;
 };
@@ -234,24 +263,26 @@ const updateUserRoleIntoDb = async (id: string, role: userRole) => {
   }
 
   try {
-    const [updatedUser] = await Promise.all([
-      prisma.user.update({
-        where: { id },
-        data: { role },
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          status: true,
-          userDetails: { select: { firstName: true, lastName: true } },
-        },
-      }),
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: { role },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        userDetails: { select: { firstName: true, lastName: true } },
+      },
+    });
+
+    // Role update also needs to clear list caches
+    await Promise.all([
       invalidateKeys(`user:${id}`),
+      CacheInvalidator.onRelatedChange("user"),
     ]);
 
     return updatedUser;
   } catch (err: any) {
-    // Prisma error code P2025 = record not found
     if (err?.code === "P2025") {
       throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
@@ -294,7 +325,6 @@ const softDeleteUserById = async (id: string) => {
   }
 
   const [updatedUser] = await Promise.all([
-    // DB soft delete
     prisma.user.update({
       where: { id },
       data: { isDeleted: true },
@@ -304,8 +334,6 @@ const softDeleteUserById = async (id: string) => {
         isDeleted: true,
       },
     }),
-
-    // ✅ Cache delete
     invalidateKeys(`user:${id}`),
     CacheInvalidator.onRelatedChange("user"),
     prisma.userSession.deleteMany({ where: { userId: id } }),
@@ -314,7 +342,10 @@ const softDeleteUserById = async (id: string) => {
   return updatedUser;
 };
 
-const updateUserIntoDb = async (payload: any, id: string) => {
+const updateUserIntoDb = async (
+  payload: Partial<IUserDetailsUpdate>,
+  id: string,
+) => {
   if (!payload || typeof payload !== "object") {
     throw new ApiError(httpStatus.BAD_REQUEST, "Invalid update payload");
   }
@@ -325,35 +356,21 @@ const updateUserIntoDb = async (payload: any, id: string) => {
   }
 
   const { firstName, lastName, address, phone } = payload;
-  const userData: Prisma.UserUpdateInput = {};
-  const userDetailsData: {
-    firstName?: string | null;
-    lastName?: string | null;
-    address?: string | null;
-    phone?: string | null;
-  } = {};
+  const userDetailsData: Prisma.userDetailsUpdateWithoutUserInput = {};
 
-  if (firstName !== undefined) {
-    userDetailsData.firstName = firstName;
-  }
-  if (lastName !== undefined) {
-    userDetailsData.lastName = lastName;
-  }
-  if (address !== undefined) {
-    userDetailsData.address = address;
-  }
-  if (phone !== undefined) {
-    userDetailsData.phone = phone;
-  }
+  if (firstName !== undefined) userDetailsData.firstName = firstName;
+  if (lastName !== undefined) userDetailsData.lastName = lastName;
+  if (address !== undefined) userDetailsData.address = address;
+  if (phone !== undefined) userDetailsData.phone = phone;
 
   const result = await prisma.user.update({
     where: { id },
     data: {
-      ...userData,
       userDetails: Object.keys(userDetailsData).length
         ? {
             upsert: {
-              create: userDetailsData,
+              create:
+                userDetailsData as Prisma.userDetailsCreateWithoutUserInput,
               update: userDetailsData,
             },
           }
@@ -377,9 +394,10 @@ const updateUserIntoDb = async (payload: any, id: string) => {
     },
   });
 
-  // Invalidate user cache after admin update
-  await invalidateKeys(`user:${id}`);
-  await CacheInvalidator.onRelatedChange("user");
+  await Promise.all([
+    invalidateKeys(`user:${id}`),
+    CacheInvalidator.onRelatedChange("user"),
+  ]);
 
   return result;
 };
@@ -392,9 +410,10 @@ const deleteUserFromDB = async (id: string) => {
 
   await prisma.user.delete({ where: { id } });
 
-  // Invalidate user cache after deletion
-  await invalidateKeys(`user:${id}`);
-  await CacheInvalidator.onRelatedChange("user");
+  await Promise.all([
+    invalidateKeys(`user:${id}`),
+    CacheInvalidator.onRelatedChange("user"),
+  ]);
 
   return { id };
 };

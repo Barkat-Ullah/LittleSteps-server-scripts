@@ -4,6 +4,7 @@ model Subscription {
     description      String?
     amount           Int
     duration         DurationType
+    isLifeTime       Boolean            @default(false)
     features         String[]
     stripeProductId  String?
     stripePriceId    String?

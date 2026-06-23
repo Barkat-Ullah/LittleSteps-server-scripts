@@ -9,7 +9,7 @@ const getFilterableFields = ["searchTerm", "status"];
 
 export const getAllUsersController = catchAsync(
   async (req: Request, res: Response) => {
-    const options = pick(req.query, ["limit", "page", "sortBy", "sortOrder"]);
+    const options = pick(req.query, ["limit", "page", "sortBy", "sortOrder", "cursor"]);
     const filters = pick(req.query, getFilterableFields);
     const result = await UserServices.getAllUsersFromDB(options, filters);
 

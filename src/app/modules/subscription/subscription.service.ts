@@ -7,6 +7,8 @@ import prisma from "../../../shared/prisma";
 import ApiError from "../../../error/ApiErrors";
 import { toStringArray, getOrCreateStripeCustomer } from "./subscription.utils";
 import { subscriptionQueue } from "../../../helpers/queue/queueFactory";
+import Stripe from "stripe";
+import { stripe } from "../../../lib/stripe";
 
 // ─── GET ALL SUBSCRIPTIONS ───────────────────────────────────────────────────
 type ISubscriptionFilterRequest = {
@@ -82,6 +84,7 @@ const getSubscriptionList = async (
       amount: true,
       duration: true,
       isDeleted: true,
+      isLifeTime: true,
       features: true,
     },
     orderBy: { createdAt: "desc" },
@@ -93,7 +96,7 @@ const getSubscriptionList = async (
   return { meta: { total, page, limit, totalUser }, data: result };
 };
 
-// ─── BUY SUBSCRIPTION IN APP (HIGH TRAFFIC OPTIMIZED) ────────────────────────
+// ─── BUY SUBSCRIPTION IN APP (SYNC STRIPE CALL - NO QUEUE) ───────────────────
 const buySubscriptionInApp = async (req: Request) => {
   const userId = req.user!.id;
   const { subscriptionId, paymentMethodId } = req.body;
@@ -103,11 +106,6 @@ const buySubscriptionInApp = async (req: Request) => {
   });
   if (!plan)
     throw new ApiError(httpStatus.NOT_FOUND, "Subscription plan not found");
-  if (!plan.stripePriceId)
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      "Stripe price not configured for this plan",
-    );
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -125,22 +123,91 @@ const buySubscriptionInApp = async (req: Request) => {
     `${user?.userDetails?.firstName} ${user?.userDetails?.lastName}` as string,
   );
 
-  const job = await subscriptionQueue.add("process-in-app-purchase", {
-    userId,
-    subscriptionId,
-    paymentMethodId,
-    stripeCustomerId,
-    plan,
+  // Attach payment method if provided
+  if (paymentMethodId) {
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: stripeCustomerId,
+    });
+    await stripe.customers.update(stripeCustomerId, {
+      invoice_settings: { default_payment_method: paymentMethodId },
+    });
+  }
+
+  // Create payment record BEFORE Stripe call → webhook race safe
+  const pendingPayment = await prisma.payment.create({
+    data: {
+      userId,
+      subscriptionId: plan.id,
+      amount: plan.amount,
+      currency: "usd",
+      status: "PENDING",
+      stripeCustomerId,
+    },
   });
+
+  if (plan.isLifeTime) {
+    // ── Lifetime: PaymentIntent ──────────────────────────────────────────
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: plan.amount * 100,
+      currency: "usd",
+      customer: stripeCustomerId,
+      payment_method: paymentMethodId,
+      confirm: true,
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: "never",
+      },
+      metadata: {
+        userId,
+        subscriptionId: plan.id,
+        isLifeTime: "true",
+        paymentId: pendingPayment.id,
+      },
+    });
+
+    // Update payment record with Stripe info
+    await prisma.payment.update({
+      where: { id: pendingPayment.id },
+      data: { stripePaymentId: paymentIntent.id },
+    });
+  } else {
+    // ── Recurring: Subscription ──────────────────────────────────────────
+    if (!plan.stripePriceId)
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Stripe price not configured for this plan",
+      );
+
+    const stripeSubscription = await stripe.subscriptions.create({
+      customer: stripeCustomerId,
+      items: [{ price: plan.stripePriceId }],
+      default_payment_method: paymentMethodId,
+      payment_behavior: "default_incomplete",
+      metadata: {
+        userId,
+        subscriptionId: plan.id,
+        isLifeTime: "false",
+        paymentId: pendingPayment.id,
+      },
+    });
+
+    // Update payment record with Stripe info
+    await prisma.payment.update({
+      where: { id: pendingPayment.id },
+      data: { stripeSessionId: stripeSubscription.id },
+    });
+  }
 
   return {
     success: true,
-    message: "Your subscription payment is queueing for processing safely.",
-    jobId: job.id,
+    message: "Subscription payment initiated successfully.",
+    paymentId: pendingPayment.id,
   };
 };
 
 // ─── BUY SUBSCRIPTION BY LINK (HIGH TRAFFIC OPTIMIZED) ───────────────────────
+// subscription.service.ts
+
 const buySubscriptionByLink = async (req: Request) => {
   const userId = req.user!.id;
   const { subscriptionId } = req.body;
@@ -164,20 +231,66 @@ const buySubscriptionByLink = async (req: Request) => {
   const stripeCustomerId = await getOrCreateStripeCustomer(
     user.id,
     user.email,
-    `${user?.userDetails?.firstName} ${user?.userDetails?.lastName}` as string,
+    `${user?.userDetails?.firstName ?? ""} ${user?.userDetails?.lastName ?? ""}`.trim(),
   );
 
-  const job = await subscriptionQueue.add("generate-checkout-link", {
-    userId,
-    subscriptionId,
-    stripeCustomerId,
-    plan,
+  // ✅ Stripe call synchronous — client এখনই URL পাবে
+  const successUrl = `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = `${process.env.CLIENT_URL}/cancel`;
+
+  let session: Stripe.Checkout.Session;
+
+  if (plan.isLifeTime) {
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer: stripeCustomerId,
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            unit_amount: plan.amount * 100,
+            product_data: { name: plan.title ?? "Lifetime Plan" },
+          },
+          quantity: 1,
+        },
+      ],
+      payment_intent_data: {
+        metadata: { userId, subscriptionId: plan.id, isLifeTime: "true" },
+      },
+      metadata: { userId, subscriptionId: plan.id, isLifeTime: "true" },
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
+  } else {
+    session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: stripeCustomerId,
+      line_items: [{ price: plan.stripePriceId!, quantity: 1 }],
+      subscription_data: {
+        metadata: { userId, subscriptionId: plan.id, isLifeTime: "false" },
+      },
+      metadata: { userId, subscriptionId: plan.id, isLifeTime: "false" },
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
+  }
+
+  await prisma.payment.create({
+    data: {
+      userId,
+      subscriptionId: plan.id,
+      amount: plan.amount,
+      currency: "usd",
+      status: "PENDING",
+      stripeSessionId: session.id,
+      stripeCustomerId,
+    },
   });
 
   return {
     success: true,
-    message: "Initiating checkout process...",
-    jobId: job.id,
+    checkoutUrl: session.url,
+    sessionId: session.id,
   };
 };
 
@@ -260,13 +373,7 @@ const updateInAppPurchasePlanData = async (req: Request) => {
   };
 };
 
-// ─── OTHER AUXILIARY SERVICES ────────────────────────────────────────────────
-const createSubscription = async (req: Request) => {
-  console.log("");
-};
-const getUserSubscriptionList = async (req: Request) => {
-  console.log("");
-};
+// ─── NOT YET IMPLEMENTED ─────────────────────────────────────────────────────
 
 const getSubscriptionById = async (req: Request) => {
   const { id } = req.params;
@@ -292,6 +399,7 @@ const updateSubscription = async (req: Request) => {
   if (data.title !== undefined) updateData.title = data.title;
   if (data.amount !== undefined) updateData.amount = parseFloat(data.amount);
   if (data.duration !== undefined) updateData.duration = data.duration;
+  if (data.isLifeTime !== undefined) updateData.isLifeTime = data.isLifeTime;
   if (featuresToSave.length > 0) updateData.features = featuresToSave;
 
   return await prisma.subscription.update({ where: { id }, data: updateData });
@@ -322,14 +430,15 @@ const cancelPlan = async (req: Request) => {
   });
   if (!currentPlan)
     throw new ApiError(httpStatus.NOT_FOUND, "No active plan found");
-  const result = await prisma.userSubscription.delete({
+  // Soft cancel: set endDate to now instead of hard-deleting — keeps audit trail
+  const result = await prisma.userSubscription.update({
     where: { id: currentPlan.id },
+    data: { endDate: new Date() },
   });
   return { message: "Plan cancelled successfully", plan: result };
 };
 
 export const subscriptionService = {
-  createSubscription,
   getSubscriptionList,
   getSubscriptionById,
   updateSubscription,
@@ -337,7 +446,6 @@ export const subscriptionService = {
   cancelPlan,
   updateInAppPurchasePlanData,
   getMyPlan,
-  getUserSubscriptionList,
   buySubscriptionInApp,
   buySubscriptionByLink,
 };

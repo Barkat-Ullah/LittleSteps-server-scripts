@@ -246,20 +246,20 @@ const getScheduleItemList = async (
 // Uses dedicated list select to avoid over-fetching (user + provider
 // are not needed here since the list is already scoped to the current user).
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
 const getScheduleItemListByDate = async (
   req: Request,
   options: IPaginationOptions,
   filters: IScheduleItemFilterRequest,
 ) => {
-  const userId = req.user!.id;
   const { page, limit, skip } = paginationHelper.calculatePagination(options);
   const { date, childId, searchTerm, status, itemType } = filters;
 
   const accessId = (req as any).accessId;
-
   const filterDateStr: string = date ?? toUTCDateKey(new Date());
+  const todayStr = toUTCDateKey(new Date());
 
+  // ─── WHERE conditions ────────────────────────────────────────────────────
   const andConditions: Prisma.ScheduleItemWhereInput[] = [
     { userId: accessId },
     { isDeleted: false },
@@ -304,6 +304,7 @@ const getScheduleItemListByDate = async (
 
   const where: Prisma.ScheduleItemWhereInput = { AND: andConditions };
 
+  // ─── Cache key ───────────────────────────────────────────────────────────
   const cacheKey = CacheKeys.myList("scheduleItem:byDate", accessId, {
     filterDateStr,
     childId,
@@ -315,16 +316,29 @@ const getScheduleItemListByDate = async (
   });
 
   return cacheOr(cacheKey, TTL.SHORT, async () => {
-    // Fetch only what's needed for the list view — no user/provider relations
-    const items = await prisma.scheduleItem.findMany({
-      skip,
-      take: limit,
-      where,
-      orderBy: { startDate: "asc" },
-      select: scheduleItemListSelect,
-    });
+    const [allItems, completedToday] = await Promise.all([
+      prisma.scheduleItem.findMany({
+        where,
+        orderBy: { startDate: "asc" },
+        select: scheduleItemListSelect,
+      }),
 
-    const filtered = items.filter((item) =>
+      prisma.scheduleItem.count({
+        where: {
+          userId: accessId,
+          isDeleted: false,
+          status: ItemStatus.Completed,
+          startDate: { lte: toUTCEndOfDay(todayStr) },
+          endDate: { gte: toUTCStartOfDay(todayStr) },
+          OR: [
+            { days: { has: getDayNameFromDateStr(todayStr) } },
+            { days: { isEmpty: true } },
+          ],
+        },
+      }),
+    ]);
+
+    const filtered = allItems.filter((item) =>
       isWithinFrequencyLimit(
         {
           days: item.days,
@@ -336,24 +350,9 @@ const getScheduleItemListByDate = async (
       ),
     );
 
-    const total = await prisma.scheduleItem.count({ where });
-
-    const todayStr = toUTCDateKey(new Date());
-    const completedToday = await prisma.scheduleItem.count({
-      where: {
-        userId: accessId,
-        isDeleted: false,
-        status: ItemStatus.Completed,
-        startDate: { lte: toUTCEndOfDay(todayStr) },
-        endDate: { gte: toUTCStartOfDay(todayStr) },
-        OR: [
-          { days: { has: getDayNameFromDateStr(todayStr) } },
-          { days: { isEmpty: true } },
-        ],
-      },
-    });
-
-    const data = filtered.map((item) => ({
+    const total = filtered.length;
+    const paginated = filtered.slice(skip, skip + limit);
+    const data = paginated.map((item) => ({
       ...item,
       isCompleted: item.userCompletedActivities?.[0]?.isCompleted ?? false,
       userCompletedActivities: undefined,
