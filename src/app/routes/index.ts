@@ -20,7 +20,8 @@ import { lognoteRouter } from "../modules/lognote/lognote.route";
 import { behaviorLogRouter } from "../modules/behaviorLog/behaviorLog.route";
 import { scheduleItemRouter } from "../modules/scheduleItem/scheduleItem.route";
 import { contactRouter } from "../modules/contact/contact.route";
-import {inspireRouter} from "../modules/inspire/inspire.route";
+import { inspireRouter } from "../modules/inspire/inspire.route";
+import { notificationsRoute } from "#app/modules/notification/notification.route";
 
 const router = Router();
 
@@ -56,6 +57,8 @@ router.use("/contact", ...secureApiLayer);
 router.use("/contact/*", ...secureApiLayer);
 router.use("/inspires", ...secureApiLayer);
 router.use("/inspires/*", ...secureApiLayer);
+router.use("/notifications", ...secureApiLayer);
+router.use("/notifications/*", ...secureApiLayer);
 
 router.use(bullBoardBasePath, ...secureApiLayer);
 router.use(`${bullBoardBasePath}/*`, ...secureApiLayer);
@@ -80,13 +83,13 @@ router.use("/log-behavior", behaviorLogRouter);
 router.use("/event", scheduleItemRouter);
 router.use("/contact", contactRouter);
 router.use("/inspires", inspireRouter);
+router.use("/notifications", notificationsRoute);
 
 router.use(bullBoardBasePath, bullBoard);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. CATCH-ALL 404 ROUTE
 // ─────────────────────────────────────────────────────────────────────────────
-
 
 // Catch-all 404   <── add this line
 router.all("*", (req, res) => {

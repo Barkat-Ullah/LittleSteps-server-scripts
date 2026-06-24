@@ -7,14 +7,13 @@ import redis, { bullMQRedisOptions } from "../../lib/redisConnection";
 // src/utils/getAdminId.ts
 
 const ADMIN_ID_CACHE_KEY = "system:adminId";
-const ADMIN_ID_TTL = 60 * 60 * 6; // 6 ঘণ্টা
+const ADMIN_ID_TTL = 60 * 60 * 6; 
 
 export async function getAdminId(): Promise<string | null> {
-  // ✅ Cache check
+  // Cache check
   const cached = await redis.get(ADMIN_ID_CACHE_KEY);
   if (cached) return cached;
 
-  // Cache miss — DB থেকে আনো
   const admin = await prisma.user.findFirst({
     where: { role: userRole.ADMIN },
     select: { id: true },
