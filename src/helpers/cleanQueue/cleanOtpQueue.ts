@@ -1,5 +1,4 @@
 import { Queue } from "bullmq";
-import { otpQueue } from "../queue";
 
 export const cleanQueue = async (queue: Queue) => {
   try {
@@ -17,13 +16,3 @@ export const cleanQueue = async (queue: Queue) => {
     console.error("❌ Failed to clean OTP queue:", error);
   }
 };
-
-// Cleaner utility: runs every 1 hour to clean queues
-const queues: Queue[] = [otpQueue];
-
-setInterval(
-  () => {
-    queues.forEach((q) => cleanQueue(q));
-  },
-  60 * 60 * 1000,
-);

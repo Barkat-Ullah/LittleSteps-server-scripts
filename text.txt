@@ -25,3 +25,4 @@ echo "✅ Deployment completed successfully! 🎉"
 ////////////////////////
 step : 3
 chmod +x /var/www/deploy.sh
+

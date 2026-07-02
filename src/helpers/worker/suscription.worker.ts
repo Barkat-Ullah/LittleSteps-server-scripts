@@ -7,7 +7,7 @@ import redis, { bullMQRedisOptions } from "../../lib/redisConnection";
 // src/utils/getAdminId.ts
 
 const ADMIN_ID_CACHE_KEY = "system:adminId";
-const ADMIN_ID_TTL = 60 * 60 * 6; 
+const ADMIN_ID_TTL = 60 * 60 * 6;
 
 export async function getAdminId(): Promise<string | null> {
   // Cache check
@@ -73,6 +73,6 @@ export const subscriptionWorker = new Worker(
   },
   {
     connection: bullMQRedisOptions,
-    concurrency: 10,
+    concurrency: 4,
   },
 );

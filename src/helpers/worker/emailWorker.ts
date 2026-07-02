@@ -12,10 +12,10 @@ export const emailWorker: Worker = createWorker(
     await emailSender(
       `You're Invited to Join ${information.className} at ${information.schoolName}`,
       information.studentEmail,
-      otpHtml
+      otpHtml,
     );
     console.log(`✅ Class invitation sent to ${information.studentEmail}`);
 
     return { success: true, type, identifier: information.studentEmail };
-  }
+  },
 );

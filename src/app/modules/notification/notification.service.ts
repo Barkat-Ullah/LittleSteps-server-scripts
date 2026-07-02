@@ -2,6 +2,7 @@ import { Request, RequestHandler } from 'express';
 import { addSSEClient, removeSSEClient } from './sse';
 import ApiError from '#error/ApiErrors';
 import prisma from '#shared/prisma';
+import { paginationHelper } from '#shared/pagination';
 
 type SendNotificationParams = {
   userId: string;
@@ -219,37 +220,41 @@ const getNotificationsFromDB = async (req: any) => {
       throw new ApiError(400, 'User ID is required');
     }
 
-    // Fetch notifications for the current user
-    const notifications = await prisma.notification.findMany({
-      where: {
-        receiverId: userId,
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+    const { page, limit, skip } = paginationHelper.calculatePagination({
+      page: req.query?.page,
+      limit: req.query?.limit,
     });
 
-    // Check if notifications exist
+    const where = {
+      receiverId: userId,
+    };
 
-    // Return formatted notifications
-    return notifications.map(notification => ({
-      id: notification.id,
-      title: notification.title,
-      body: notification.body,
-      isRead: notification.isRead,
-      createdAt: notification.createdAt,
-      sender: {
-        id: notification?.sender?.id,
-      },
-    }));
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          body: true,
+          isRead: true,
+          createdAt: true,
+          sender: {
+            select: {
+              id: true,
+            },
+          },
+        },
+        orderBy: [{ isRead: 'asc' }, { createdAt: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      prisma.notification.count({ where }),
+    ]);
+
+    return {
+      meta: { page, limit, total },
+      data: notifications,
+    };
   } catch (error: any) {
     throw new ApiError(500, error.message || 'Failed to fetch notifications');
   }
@@ -272,7 +277,6 @@ const getSingleNotificationFromDB = async (
       throw new ApiError(400, 'Notification ID is required');
     }
 
-    // Fetch the notification
     const notification = await prisma.notification.findFirst({
       where: {
         id: notificationId,
@@ -282,25 +286,28 @@ const getSingleNotificationFromDB = async (
         sender: {
           select: {
             id: true,
-            email: true,
           },
         },
       },
     });
 
-    // Mark the notification as read
-    const updatedNotification = await prisma.notification.update({
-      where: { id: notificationId },
-      data: { isRead: true },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            email: true,
+    if (!notification) {
+      throw new ApiError(404, 'Notification not found');
+    }
+
+    const updatedNotification = notification.isRead
+      ? notification
+      : await prisma.notification.update({
+          where: { id: notificationId },
+          data: { isRead: true },
+          include: {
+            sender: {
+              select: {
+                id: true,
+              },
+            },
           },
-        },
-      },
-    });
+        });
 
     // Return the updated notification
     return {
@@ -311,7 +318,6 @@ const getSingleNotificationFromDB = async (
       createdAt: updatedNotification.createdAt,
       sender: {
         id: updatedNotification?.sender?.id,
-        email: updatedNotification?.sender?.email,
       },
     };
   } catch (error: any) {
@@ -319,7 +325,9 @@ const getSingleNotificationFromDB = async (
   }
 };
 
-const getMyNotifications = async(req:Request)=>{}
+const getMyNotifications = async (req: Request) => {
+  return getNotificationsFromDB(req);
+};
 
 export const notificationServices = {
   // sendSingleNotification,

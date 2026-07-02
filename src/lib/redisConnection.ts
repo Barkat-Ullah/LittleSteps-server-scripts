@@ -70,7 +70,7 @@ redis.on("end", () =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TTL = {
-  SHORT: 60 * 10, //  5 minutes — paginated / filtered list
+  SHORT: 60 * 10, //  10 minutes — paginated / filtered list
   MEDIUM: 60 * 30, // 30 minutes — single record by ID
   LONG: 60 * 60 * 6, //  6 hours — rarely-changing data
   DAY: 60 * 60 * 24, // 24 hours — static / config data
@@ -432,7 +432,7 @@ export async function disconnectRedis(): Promise<void> {
     console.error(
       `Redis graceful quit failed: ${err.message} — forcing disconnect`,
     );
-    redis.disconnect(); // force close
+    redis.disconnect();
   }
 }
 

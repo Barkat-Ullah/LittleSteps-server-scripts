@@ -1,18 +1,36 @@
 import { Job, WorkerOptions, Worker } from "bullmq";
 import { bullMQRedisOptions } from "../../lib/redisConnection";
 
+const workerDefaults: Record<string, Partial<WorkerOptions>> = {
+  "otp-queue": {
+    concurrency: 8,
+    limiter: {
+      max: 20,
+      duration: 1000,
+    },
+  },
+  "mail-queue": {
+    concurrency: 3,
+    limiter: {
+      max: 6,
+      duration: 1000,
+    },
+  },
+  "subscription-processing": {
+    concurrency: 4,
+  },
+};
+
 export const createWorker = (
   name: string,
   processor: (job: Job) => Promise<any>,
   options?: WorkerOptions,
 ) => {
+  const defaults = workerDefaults[name] ?? {};
+
   const worker = new Worker(name, processor, {
     connection: bullMQRedisOptions,
-    concurrency: 5, // process up to 5 OTPs concurrently
-    limiter: {
-      max: 10, // max 10 per second
-      duration: 1000,
-    },
+    ...defaults,
     ...options,
   });
 

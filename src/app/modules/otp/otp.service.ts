@@ -164,7 +164,6 @@ export const sendOtpService = async (payload: SendOtpInput) => {
   ).toISOString();
   const key = otpKey(payload.purpose, payload.identifier);
 
-  // কোপাইলট ফিক্স ১: ডাটাবেজ ডাউন থাকলেও যেন ওটিপি রিকোয়েস্ট ফেইল না করে
   try {
     await saveOtpSession({
       identifier: payload.identifier,
@@ -208,7 +207,7 @@ export const sendOtpService = async (payload: SendOtpInput) => {
       { removeOnComplete: 25, removeOnFail: 25 },
     );
   } catch (queueError) {
-    deliveryFallback = true; // কোপাইলট ফিক্স ৩: কিউ ফেইল ফ্ল্যাগ
+    deliveryFallback = true; 
     console.error("🚨 OTP queue failed. Fallback to direct delivery.", queueError);
     await directSendOtp(payload.identifier, otp, channelType);
   }
@@ -238,7 +237,6 @@ export const verifyOtpService = async (payload: VerifyOtpInput) => {
   if (!stored)
     throw new ApiError(httpStatus.BAD_REQUEST, "Session expired. Start over.");
 
-  // কোপাইলট ফিক্স ২: নট-নাল অ্যাসারশন (!) রিমুভ করে সেফ ডেট চ্যাকিং
   if (!stored.otpExpiresAt || new Date() > new Date(stored.otpExpiresAt)) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,

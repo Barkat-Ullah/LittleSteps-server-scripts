@@ -20,7 +20,7 @@ const auth = (...roles: string[]): RequestHandler => {
 
       const rawToken = token.replace(/^bearer /i, "").trim();
 
-      // ✅ Blacklist check
+      // Blacklist check
       const blacklisted = await isTokenBlacklisted(rawToken);
       if (blacklisted) throw new ApiError(401, "Token has been invalidated");
 
@@ -29,7 +29,7 @@ const auth = (...roles: string[]): RequestHandler => {
         config.jwt.jwt_secret as Secret,
       );
 
-      // ✅ User cache check
+      // User cache check
       const user = await cacheOr(`user:${verifiedUser.id}`, TTL.SHORT, () =>
         prisma.user.findUnique({
           where: { id: verifiedUser.id },

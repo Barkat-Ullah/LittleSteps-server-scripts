@@ -101,7 +101,7 @@ const getAllUsersFromDB = async (
 };
 
 const getUserDetailsFromDB = async (id: string) => {
-  return cacheOr(`user:${id}`, TTL.MEDIUM, async () => {
+  return cacheOr(`user:details:${id}`, TTL.MEDIUM, async () => {
     const user = await prisma.user.findUnique({
       where: { id },
       select: {
@@ -133,7 +133,7 @@ const getUserDetailsFromDB = async (id: string) => {
 };
 
 const getMyProfileFromDB = async (userId: string) => {
-  return cacheOr(`user:${userId}`, TTL.MEDIUM, async () => {
+  return cacheOr(`user:profile:${userId}`, TTL.MEDIUM, async () => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -250,7 +250,7 @@ const updateMyProfileIntoDb = async (req: Request) => {
 
   // Clean-up caches synchronously to avoid race condition
   await Promise.all([
-    invalidateKeys(`user:${userId}`),
+    invalidateKeys(`user:profile:${userId}`, `user:details:${userId}`),
     CacheInvalidator.onRelatedChange("user"),
   ]);
 
@@ -277,7 +277,7 @@ const updateUserRoleIntoDb = async (id: string, role: userRole) => {
 
     // Role update also needs to clear list caches
     await Promise.all([
-      invalidateKeys(`user:${id}`),
+      invalidateKeys(`user:profile:${id}`, `user:details:${id}`),
       CacheInvalidator.onRelatedChange("user"),
     ]);
 
@@ -310,7 +310,7 @@ const toggleUserStatus = async (id: string) => {
       where: { id },
       data: { status: newStatus },
     }),
-    invalidateKeys(`user:${id}`),
+    invalidateKeys(`user:profile:${id}`, `user:details:${id}`),
     CacheInvalidator.onRelatedChange("user"),
     prisma.userSession.deleteMany({ where: { userId: id } }),
   ]);
@@ -334,7 +334,7 @@ const softDeleteUserById = async (id: string) => {
         isDeleted: true,
       },
     }),
-    invalidateKeys(`user:${id}`),
+    invalidateKeys(`user:profile:${id}`, `user:details:${id}`),
     CacheInvalidator.onRelatedChange("user"),
     prisma.userSession.deleteMany({ where: { userId: id } }),
   ]);
@@ -395,7 +395,7 @@ const updateUserIntoDb = async (
   });
 
   await Promise.all([
-    invalidateKeys(`user:${id}`),
+    invalidateKeys(`user:profile:${id}`, `user:details:${id}`),
     CacheInvalidator.onRelatedChange("user"),
   ]);
 
@@ -411,7 +411,7 @@ const deleteUserFromDB = async (id: string) => {
   await prisma.user.delete({ where: { id } });
 
   await Promise.all([
-    invalidateKeys(`user:${id}`),
+    invalidateKeys(`user:profile:${id}`, `user:details:${id}`),
     CacheInvalidator.onRelatedChange("user"),
   ]);
 

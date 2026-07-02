@@ -17,6 +17,13 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       IS_WORKER: "false"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          memory: 256M
     depends_on:
       mongo:
         condition: service_healthy

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 
 const clients = new Map<string, Set<Response>>();
+let heartbeatStarted = false;
 
 export const addSSEClient = (userId: string, res: Response) => {
   if (!clients.has(userId)) clients.set(userId, new Set());
@@ -20,6 +21,12 @@ export const sendSSEToUser = (userId: string, event: string, data: any) => {
 };
 
 const startGlobalHeartbeat = () => {
+  if (heartbeatStarted) {
+    return;
+  }
+
+  heartbeatStarted = true;
+
   setInterval(() => {
     let activeCount = 0;
 
@@ -34,10 +41,6 @@ const startGlobalHeartbeat = () => {
         }
       });
     });
-
-    if (activeCount > 0) {
-      console.log(`Heartbeat sent to ${activeCount} connections`);
-    }
   }, 20000);
 };
 

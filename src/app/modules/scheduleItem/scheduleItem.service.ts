@@ -50,12 +50,43 @@ const scheduleItemListSelect = {
     where: { isDeleted: false },
     select: { id: true, fullName: true, image: true },
   },
-  userCompletedActivities: {
-    select: { isCompleted: true },
-    orderBy: { completedAt: "desc" as const },
-    take: 1,
-  },
 } satisfies Prisma.ScheduleItemSelect;
+
+async function loadCompletionState(
+  accessId: string,
+  scheduleItemIds: string[],
+): Promise<Map<string, boolean>> {
+  if (scheduleItemIds.length === 0) {
+    return new Map();
+  }
+
+  const completionRows = await prisma.userCompletedActivity.findMany({
+    where: {
+      userId: accessId,
+      scheduleItemId: { in: scheduleItemIds },
+    },
+    select: {
+      scheduleItemId: true,
+      isCompleted: true,
+      completedAt: true,
+    },
+    orderBy: {
+      completedAt: "desc",
+    },
+  });
+
+  const completionState = new Map<string, boolean>();
+
+  for (const row of completionRows) {
+    if (!row.scheduleItemId || completionState.has(row.scheduleItemId)) {
+      continue;
+    }
+
+    completionState.set(row.scheduleItemId, row.isCompleted);
+  }
+
+  return completionState;
+}
 
 /**
  * Build the shared date + day filter used in both list and monthly queries.
@@ -81,7 +112,6 @@ function buildDateAndDayFilter(
 // ─────────────────────────────────────────────────────────────────────────────
 
 const createScheduleItem = async (req: Request) => {
-  const userId = req.user!.id;
   const data = req.body;
   const files = req.files as
     | { [fieldname: string]: Express.Multer.File[] }
@@ -246,7 +276,7 @@ const getScheduleItemList = async (
 // Uses dedicated list select to avoid over-fetching (user + provider
 // are not needed here since the list is already scoped to the current user).
 // ─────────────────────────────────────────────────────────────────────────────
- 
+
 const getScheduleItemListByDate = async (
   req: Request,
   options: IPaginationOptions,
@@ -352,10 +382,14 @@ const getScheduleItemListByDate = async (
 
     const total = filtered.length;
     const paginated = filtered.slice(skip, skip + limit);
+    const completionState = await loadCompletionState(
+      accessId,
+      paginated.map((item) => item.id),
+    );
+
     const data = paginated.map((item) => ({
       ...item,
-      isCompleted: item.userCompletedActivities?.[0]?.isCompleted ?? false,
-      userCompletedActivities: undefined,
+      isCompleted: completionState.get(item.id) ?? false,
       child: (item.children as any)?.[0] ?? null,
     }));
 
@@ -777,7 +811,6 @@ const updateScheduleItem = async (req: Request) => {
 
 const toggleStatusScheduleItem = async (req: Request) => {
   const { id } = req.params;
-  const userId = req.user!.id;
   const accessId = (req as any).accessId;
 
   const existing = await prisma.scheduleItem.findUnique({
@@ -824,7 +857,6 @@ const toggleStatusScheduleItem = async (req: Request) => {
 
 const softDeleteScheduleItem = async (req: Request) => {
   const { id } = req.params;
-  const userId = req.user!.id;
   const accessId = (req as any).accessId;
 
   const existing = await prisma.scheduleItem.findUnique({
@@ -869,7 +901,6 @@ const softDeleteScheduleItem = async (req: Request) => {
 
 const deleteScheduleItem = async (req: Request) => {
   const { id } = req.params;
-  const userId = req.user!.id;
   const accessId = (req as any).accessId;
 
   const existing = await prisma.scheduleItem.findUnique({
